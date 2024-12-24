@@ -3,7 +3,7 @@ if game.PlaceId == 10449761463 then
     local CurrentVersion = "TSB - Beta 0.1"
     
     -- GUI Library
-    local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlosegui/refs/heads/main/test.lua"))()
+    local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/GhostDuckyy/UI-Libraries/main/Neverlose/source.lua"))()
 
     -- Main GUI
     local Window = Library:Window({
