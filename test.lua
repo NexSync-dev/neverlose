@@ -3,7 +3,7 @@ if game.PlaceId == 10449761463 then
     local CurrentVersion = "TSB - Beta 0.1"
     
     -- GUI Library
-    local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/GhostDuckyy/UI-Libraries/main/Neverlose/source.lua"))()
+    local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlosegui/refs/heads/main/test.lua"))()
 
     -- Main GUI
     local Window = Library:Window({
@@ -464,75 +464,98 @@ Section:Button({
     end,
 })
 
-
-
 local Section = Tab:Section({
-    text = "No Stun"
+    text = "booty clap"
 })
 
-Section:Button({
-    text = "Anti-Stun Button",
-    callback = function()
-        local Players = game:GetService("Players")
-        local LocalPlayer = Players.LocalPlayer
-        local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+local AnimationId = "rbxassetid://120789866363939"
+local selectedPlayerName = nil
+local following = false
 
-        -- Function to remove stun and ragdoll effects
-        local function removeStunAndRagdoll()
-            if not Character or not Character:FindFirstChild("Humanoid") then return end
-            local Humanoid = Character.Humanoid
+-- Create an animation instance
+local animation = Instance.new("Animation")
+animation.AnimationId = AnimationId
+local animator = Character:WaitForChild("Humanoid"):WaitForChild("Animator")
+local animationTrack = animator:LoadAnimation(animation)
 
-            -- Restore WalkSpeed and JumpPower if they are set to 0
-            if Humanoid.WalkSpeed < 16 then
-                Humanoid.WalkSpeed = 16 -- Default Roblox WalkSpeed
-            end
+-- Function to stop movement and animation
+local function stopFollowing()
+    following = false
+    animationTrack:Stop()
+end
 
-            if Humanoid.JumpPower < 50 then
-                Humanoid.JumpPower = 50 -- Default Roblox JumpPower
-            end
+-- Function to follow the selected player
+local function followPlayer(targetPlayer)
+    if not targetPlayer or not targetPlayer.Character then return end
+    local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not targetRoot then return end
 
-            -- Prevent the HumanoidRootPart from being anchored
-            local RootPart = Character:FindFirstChild("HumanoidRootPart")
-            if RootPart and RootPart.Anchored then
-                RootPart.Anchored = false
-            end
+    -- Play the animation
+    animationTrack:Play()
+    following = true
 
-            -- Re-enable character movement by resetting all constraints and states
-            for _, obj in ipairs(Character:GetDescendants()) do
-                if obj:IsA("HingeConstraint") or obj:IsA("BallSocketConstraint") or obj:IsA("RodConstraint") then
-                    obj.Enabled = false -- Disable constraints that cause ragdolling
-                end
-            end
+    -- Follow loop
+    while following and selectedPlayerName == targetPlayer.Name do
+        -- Position closer behind the player
+        local behindPosition = targetRoot.CFrame * CFrame.new(0, 0, 3) -- Closer distance
+        local tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { -- Faster speed
+            CFrame = behindPosition
+        })
+        tween:Play()
+        tween.Completed:Wait()
 
-            -- Reset physical states to ensure mobility
-            if Character.PrimaryPart then
-                Character.PrimaryPart.AssemblyLinearVelocity = Vector3.new(0, Character.PrimaryPart.AssemblyLinearVelocity.Y, 0)
-                Character.PrimaryPart.AssemblyAngularVelocity = Vector3.zero
-            end
+        -- Move forward and back smoothly
+        local forwardPosition = targetRoot.CFrame * CFrame.new(0, 0, 2) -- Closer forward movement
+        local backPosition = targetRoot.CFrame * CFrame.new(0, 0, 4) -- Closer backward movement
 
-            -- Force movement by ensuring PlatformStand is off
-            if Humanoid.PlatformStand then
-                Humanoid.PlatformStand = false
-            end
+        -- Forward movement
+        tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), { -- Faster
+            CFrame = forwardPosition
+        })
+        tween:Play()
+        tween.Completed:Wait()
 
-            -- Check and ensure CanCollide for HumanoidRootPart
-            if RootPart and not RootPart.CanCollide then
-                RootPart.CanCollide = true
-            end
+        -- Backward movement
+        tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), { -- Faster
+            CFrame = backPosition
+        })
+        tween:Play()
+        tween.Completed:Wait()
+
+        wait(0.05) -- Shorter delay for smoother following
+    end
+
+    -- Stop the animation when done
+    animationTrack:Stop()
+end
+
+-- Create the dropdown with player options and "None"
+local playerNames = {"None"} -- Start with "None" option
+for _, player in ipairs(Players:GetPlayers()) do
+    table.insert(playerNames, player.Name)
+end
+
+Section:Dropdown({
+    text = "Select Player",
+    list = playerNames,
+    default = "None",
+    callback = function(selectedPlayer)
+        selectedPlayerName = selectedPlayer
+        if selectedPlayer == "None" then
+            stopFollowing()
+        else
+            local targetPlayer = Players:FindFirstChild(selectedPlayer)
+            stopFollowing() -- Stop any current movement before starting a new one
+            followPlayer(targetPlayer)
         end
-
-        -- Monitor the player's character for stun and ragdoll effects
-        Character.Humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(removeStunAndRagdoll)
-        Character.Humanoid:GetPropertyChangedSignal("JumpPower"):Connect(removeStunAndRagdoll)
-        Character:WaitForChild("HumanoidRootPart").GetPropertyChangedSignal("Anchored"):Connect(removeStunAndRagdoll)
-        Character.Humanoid:GetPropertyChangedSignal("PlatformStand"):Connect(removeStunAndRagdoll)
-
-        -- Apply the anti-stun function regularly
-        while task.wait(0.1) do
-            removeStunAndRagdoll()
-        end
-    end,
+    end
 })
+
 
 local Section = Tab:Section({
     text = "Anti death"
