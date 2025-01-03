@@ -345,6 +345,308 @@ local Tab = TabSection:Tab({
 })
 
 local Section = Tab:Section({
+    text = "General ESP"
+})
+
+-- Services
+local RunService = game:GetService("RunService");
+local PlayersService = game:GetService("Players");
+
+-- Variables
+local Camera = workspace.CurrentCamera;
+local LastPos;
+local Lines = {};
+local Quads = {};
+local ESPEnabled = false; -- Toggle state
+local ESPConnection;
+
+-- Functions
+local function HasCharacter(Player)
+    return Player.Character and Player.Character:FindFirstChild("HumanoidRootPart");
+end;
+
+local function DrawQuad(PosA, PosB, PosC, PosD)
+    local PosAScreen, PosAVisible = Camera:WorldToViewportPoint(PosA);
+    local PosBScreen, PosBVisible = Camera:WorldToViewportPoint(PosB);
+    local PosCScreen, PosCVisible = Camera:WorldToViewportPoint(PosC);
+    local PosDScreen, PosDVisible = Camera:WorldToViewportPoint(PosD);
+
+    if (not PosAVisible and not PosBVisible and not PosCVisible and not PosDVisible) then return; end;
+
+    local PosAVec = Vector2.new(PosAScreen.X, PosAScreen.Y);
+    local PosBVec = Vector2.new(PosBScreen.X, PosBScreen.Y);
+    local PosCVec = Vector2.new(PosCScreen.X, PosCScreen.Y);
+    local PosDVec = Vector2.new(PosDScreen.X, PosDScreen.Y);
+
+    local Quad = Drawing.new("Quad");
+        Quad.Thickness = .5;
+        Quad.Color = Color3.fromRGB(255, 255, 255);
+        Quad.Transparency = .25;
+        Quad.ZIndex = 1;
+        Quad.Filled = true;
+        Quad.Visible = true;
+
+    Quad.PointA = PosAVec;
+    Quad.PointB = PosBVec;
+    Quad.PointC = PosCVec;
+    Quad.PointD = PosDVec;
+
+    table.insert(Quads, Quad);
+end;
+
+local function DrawLine(From, To)
+    local FromScreen, FromVisible = Camera:WorldToViewportPoint(From);
+    local ToScreen, ToVisible = Camera:WorldToViewportPoint(To);
+
+    if (not FromVisible and not ToVisible) then return; end;
+
+    local FromPos = Vector2.new(FromScreen.X, FromScreen.Y);
+    local ToPos = Vector2.new(ToScreen.X, ToScreen.Y);
+
+    local Line = Drawing.new("Line");
+        Line.Thickness = 1;
+        Line.From = FromPos;
+        Line.To = ToPos;
+        Line.Color = Color3.fromRGB(255, 255, 255);
+        Line.Transparency = 1;
+        Line.ZIndex = 1;
+        Line.Visible = true;
+
+    table.insert(Lines, Line);
+end;
+
+local function GetCorners(Part)
+    local CF, Size, Corners = Part.CFrame, Part.Size / 2, {};
+    for X = -1, 1, 2 do for Y = -1, 1, 2 do for Z = -1, 1, 2 do
+        Corners[#Corners+1] = (CF * CFrame.new(Size * Vector3.new(X, Y, Z))).Position;
+    end; end; end;
+    return Corners;
+end;
+
+local function DrawEsp(Player)
+    local HRP = Player.Character.HumanoidRootPart;
+
+    -- Constructing the 3d box.
+    local CubeVertices = GetCorners({CFrame = HRP.CFrame * CFrame.new(0, -0.5, 0), Size = Vector3.new(3, 5, 3)});
+
+    -- Drawing the 3d box.
+    DrawLine(CubeVertices[1], CubeVertices[2]);
+    DrawLine(CubeVertices[2], CubeVertices[6]);
+    DrawLine(CubeVertices[6], CubeVertices[5]);
+    DrawLine(CubeVertices[5], CubeVertices[1]);
+
+    DrawQuad(CubeVertices[1], CubeVertices[2], CubeVertices[6], CubeVertices[5]);
+
+    DrawLine(CubeVertices[1], CubeVertices[3]);
+    DrawLine(CubeVertices[2], CubeVertices[4]);
+    DrawLine(CubeVertices[6], CubeVertices[8]);
+    DrawLine(CubeVertices[5], CubeVertices[7]);
+
+    DrawQuad(CubeVertices[2], CubeVertices[4], CubeVertices[8], CubeVertices[6]);
+    DrawQuad(CubeVertices[1], CubeVertices[2], CubeVertices[4], CubeVertices[3]);
+    DrawQuad(CubeVertices[1], CubeVertices[5], CubeVertices[7], CubeVertices[3]);
+    DrawQuad(CubeVertices[5], CubeVertices[7], CubeVertices[8], CubeVertices[6]);
+
+    DrawLine(CubeVertices[3], CubeVertices[4]);
+    DrawLine(CubeVertices[4], CubeVertices[8]);
+    DrawLine(CubeVertices[8], CubeVertices[7]);
+    DrawLine(CubeVertices[7], CubeVertices[3]);
+
+    DrawQuad(CubeVertices[3], CubeVertices[4], CubeVertices[8], CubeVertices[7]);
+end;
+
+local function BoxEsp()
+    local Players = PlayersService:GetPlayers();
+
+    for i = 1, #Lines do
+        local Line = rawget(Lines, i);
+        if (Line) then Line:Remove(); end;
+    end;
+
+    Lines = {};
+
+    for i = 1, #Quads do
+        local Quad = rawget(Quads, i);
+        if (Quad) then Quad:Remove(); end;
+    end;
+
+    Quads = {};
+
+    for i = 1, #Players do
+        local Player = rawget(Players, i);
+        if HasCharacter(Player) then
+            DrawEsp(Player);
+        end;
+    end;
+end;
+
+-- Toggle
+Section:Toggle({
+    text = "Box ESP Toggle",
+    state = ESPEnabled,
+    callback = function(state)
+        ESPEnabled = state;
+
+        if ESPEnabled then
+            ESPConnection = RunService.RenderStepped:Connect(BoxEsp);
+        elseif ESPConnection then
+            ESPConnection:Disconnect();
+            ESPConnection = nil;
+
+            -- Clear existing ESP visuals
+            for _, Line in ipairs(Lines) do
+                Line:Remove();
+            end;
+            Lines = {};
+
+            for _, Quad in ipairs(Quads) do
+                Quad:Remove();
+            end;
+            Quads = {};
+        end;
+    end;
+});
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local toggleEnabled = false  -- Default state, beams are off
+local beams = {}  -- Table to store the beams
+
+-- Function to create a beam from the player's CFrame to another player's CFrame
+local function createBeam(targetPlayer)
+    local beam = Instance.new("Beam")
+    beam.Parent = game.Workspace
+    beam.Color = ColorSequence.new(Color3.fromRGB(0, 255, 0))  -- Green color for the beam
+    beam.Width0 = 0.2
+    beam.Width1 = 0.2
+    beam.Texture = ""  -- Optional: Add a texture to the beam if desired
+
+    local attachment0 = Instance.new("Attachment")
+    attachment0.Parent = LocalPlayer.Character.HumanoidRootPart
+    attachment0.Position = Vector3.new(0, 5, 0)  -- Adjust position if needed
+
+    local attachment1 = Instance.new("Attachment")
+    attachment1.Parent = targetPlayer.Character.HumanoidRootPart
+    attachment1.Position = Vector3.new(0, 5, 0)  -- Adjust position if needed
+
+    beam.Attachment0 = attachment0
+    beam.Attachment1 = attachment1
+    return beam
+end
+
+-- Function to toggle the visibility of the beams
+local function toggleBeams(state)
+    toggleEnabled = state
+
+    -- If toggle is enabled, create beams for each player
+    if toggleEnabled then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                -- Create a beam to the other player
+                local beam = createBeam(player)
+                table.insert(beams, beam)  -- Store the beam in the table
+            end
+        end
+    else
+        -- If toggle is disabled, remove all beams
+        for _, beam in pairs(beams) do
+            beam:Destroy()
+        end
+        beams = {}  -- Clear the beams table
+    end
+end
+
+-- Toggle Button
+Section:Toggle({
+    text = "Enable/Disable Beams",
+    state = toggleEnabled,  -- Set the initial state to match the toggle
+    callback = function(boolean)
+        toggleBeams(boolean)  -- Toggle the beams based on the state
+    end
+})
+
+local ESPEnabled = false
+
+-- Function to create the 2D box and health bar for other players
+local function createESP(player)
+    -- Ensure the player character and humanoid are loaded
+    if not player.Character or not player.Character:FindFirstChild("Humanoid") then
+        return
+    end
+
+    local humanoid = player.Character.Humanoid
+    local rootPart = player.Character:WaitForChild("HumanoidRootPart")
+
+    -- Create 2D box and health bar elements
+    local box = Instance.new("Frame")
+    local healthBar = Instance.new("Frame")
+
+    -- Set box properties
+    box.Size = UDim2.new(0, 100, 0, 200) -- Adjust size to cover the body
+    box.Position = UDim2.new(0, rootPart.Position.X, 0, rootPart.Position.Y)
+    box.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red box
+    box.AnchorPoint = Vector2.new(0.5, 0.5) -- Anchor in the center
+
+    -- Set health bar properties
+    healthBar.Size = UDim2.new(0, 100, 0, 10) -- Width = full body, height = small bar
+    healthBar.Position = UDim2.new(0, rootPart.Position.X, 0, rootPart.Position.Y - 20) -- Position above the box
+    healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green health bar
+    healthBar.AnchorPoint = Vector2.new(0.5, 0.5)
+
+    -- Add to the GUI (assumes GUI container exists)
+    box.Parent = game.Players.LocalPlayer.PlayerGui
+    healthBar.Parent = game.Players.LocalPlayer.PlayerGui
+
+    -- Function to update health bar dynamically
+    local function updateHealth()
+        local healthPercent = humanoid.Health / humanoid.MaxHealth
+        healthBar.Size = UDim2.new(0, 100 * healthPercent, 0, 10) -- Update the health bar width
+    end
+
+    -- Update health bar in a loop
+    while ESPEnabled and player.Character and humanoid.Parent do
+        updateHealth()
+
+        -- Update the box and health bar position to face the local player
+        local camera = game.Workspace.CurrentCamera
+        local screenPos, onScreen = camera:WorldToScreenPoint(rootPart.Position)
+        if onScreen then
+            box.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y)
+            healthBar.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y - 25)
+        end
+
+        wait(0.1) -- Update health and position every 0.1 seconds
+    end
+
+    -- Cleanup when ESP is disabled
+    box:Destroy()
+    healthBar:Destroy()
+end
+
+-- Toggle the ESP
+Section:Toggle({
+    text = "CS:GO ESP",
+    state = ESPEnabled, -- Default state
+    callback = function(boolean)
+        ESPEnabled = boolean
+        if ESPEnabled then
+            -- Loop through all players and create ESP for each
+            for _, player in pairs(game.Players:GetPlayers()) do
+                if player.Character then
+                    createESP(player)
+                end
+            end
+        else
+            -- Remove ESP if it's disabled
+            for _, player in pairs(game.Players:GetPlayers()) do
+                -- You can remove their ESP here
+            end
+        end
+    end
+})
+
+
+local Section = Tab:Section({
     text = "Death Counter"
 })
 
