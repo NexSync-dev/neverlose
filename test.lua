@@ -575,71 +575,89 @@ local function createESP(player)
     end
 
     local humanoid = player.Character.Humanoid
-    local rootPart = player.Character:WaitForChild("HumanoidRootPart")
+    local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then
+        return
+    end
 
     -- Create 2D box and health bar elements
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = player.Name .. "_ESP"
+    screenGui.Parent = game.Players.LocalPlayer:FindFirstChild("PlayerGui") or Instance.new("PlayerGui", game.Players.LocalPlayer)
+
     local box = Instance.new("Frame")
     local healthBar = Instance.new("Frame")
 
     -- Set box properties
     box.Size = UDim2.new(0, 100, 0, 200) -- Adjust size to cover the body
-    box.Position = UDim2.new(0, rootPart.Position.X, 0, rootPart.Position.Y)
     box.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red box
-    box.AnchorPoint = Vector2.new(0.5, 0.5) -- Anchor in the center
+    box.AnchorPoint = Vector2.new(0.5, 0.5)
+    box.BorderSizePixel = 0
+    box.Parent = screenGui
 
     -- Set health bar properties
     healthBar.Size = UDim2.new(0, 100, 0, 10) -- Width = full body, height = small bar
-    healthBar.Position = UDim2.new(0, rootPart.Position.X, 0, rootPart.Position.Y - 20) -- Position above the box
     healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green health bar
     healthBar.AnchorPoint = Vector2.new(0.5, 0.5)
+    healthBar.BorderSizePixel = 0
+    healthBar.Parent = screenGui
 
-    -- Add to the GUI (assumes GUI container exists)
-    box.Parent = game.Players.LocalPlayer.PlayerGui
-    healthBar.Parent = game.Players.LocalPlayer.PlayerGui
-
-    -- Function to update health bar dynamically
-    local function updateHealth()
-        local healthPercent = humanoid.Health / humanoid.MaxHealth
-        healthBar.Size = UDim2.new(0, 100 * healthPercent, 0, 10) -- Update the health bar width
-    end
-
-    -- Update health bar in a loop
-    while ESPEnabled and player.Character and humanoid.Parent do
-        updateHealth()
-
-        -- Update the box and health bar position to face the local player
-        local camera = game.Workspace.CurrentCamera
-        local screenPos, onScreen = camera:WorldToScreenPoint(rootPart.Position)
-        if onScreen then
-            box.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y)
-            healthBar.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y - 25)
+    -- Function to update positions and health dynamically
+    local function updateESP()
+        if not humanoid or not humanoid.Parent then
+            screenGui:Destroy()
+            return
         end
 
-        wait(0.1) -- Update health and position every 0.1 seconds
+        local camera = workspace.CurrentCamera
+        local screenPos, onScreen = camera:WorldToScreenPoint(rootPart.Position)
+        if onScreen then
+            box.Visible = true
+            healthBar.Visible = true
+
+            box.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y)
+            healthBar.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y + 110)
+
+            -- Update health bar width dynamically
+            local healthPercent = humanoid.Health / humanoid.MaxHealth
+            healthBar.Size = UDim2.new(0, 100 * healthPercent, 0, 10)
+        else
+            box.Visible = false
+            healthBar.Visible = false
+        end
     end
 
-    -- Cleanup when ESP is disabled
-    box:Destroy()
-    healthBar:Destroy()
+    -- Update in a loop
+    task.spawn(function()
+        while ESPEnabled and humanoid.Parent do
+            updateESP()
+            task.wait(0.1)
+        end
+        screenGui:Destroy()
+    end)
 end
 
 -- Toggle the ESP
 Section:Toggle({
-    text = "CS:GO ESP",
+    text = "CS:GO ESP not workie",
     state = ESPEnabled, -- Default state
-    callback = function(boolean)
-        ESPEnabled = boolean
+    callback = function(state)
+        ESPEnabled = state
+        print("ESP toggled:", ESPEnabled) -- Debugging line to check toggle state
+
         if ESPEnabled then
-            -- Loop through all players and create ESP for each
-            for _, player in pairs(game.Players:GetPlayers()) do
-                if player.Character then
+            -- Enable ESP for all other players
+            for _, player in ipairs(game.Players:GetPlayers()) do
+                if player ~= game.Players.LocalPlayer then
                     createESP(player)
                 end
             end
         else
-            -- Remove ESP if it's disabled
-            for _, player in pairs(game.Players:GetPlayers()) do
-                -- You can remove their ESP here
+            -- Disable ESP by destroying all ESP GUI elements
+            for _, gui in ipairs(game.Players.LocalPlayer.PlayerGui:GetChildren()) do
+                if gui.Name:match("_ESP") then
+                    gui:Destroy()
+                end
             end
         end
     end
