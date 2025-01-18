@@ -876,6 +876,84 @@ Section:Dropdown({
     end
 })
 
+-- Placeholder for your loop coroutine
+getgenv().loop = nil
+
+-- Animation configuration
+local animations = {
+    ["rbxassetid://12273188754"] = 1.31,
+    ["rbxassetid://12296113986"] = 1.2,
+}
+
+-- Utility function
+function ifind(t, a)
+    for i, v in pairs(t) do
+        if i == a then
+            return i
+        end
+    end
+    return false
+end
+
+-- The toggle from your GUI
+Section:Toggle({
+    text = "insta kill normal",
+    state = false, -- Default state
+    callback = function(boolean)
+        print("Toggle current: ", boolean)
+        
+        if boolean then
+            -- Start the loop
+            getgenv().loop = coroutine.create(function()
+                local plr = game.Players.LocalPlayer
+                local dothetech = false
+                local lastcf
+
+                while true do
+                    task.wait()
+                    if not boolean then break end -- Stop if toggle is off
+
+                    local character = plr.Character
+                    local animate = character.Humanoid.Animator
+
+                    for i, v in pairs(animate:GetPlayingAnimationTracks()) do
+                        if ifind(animations, v.Animation.AnimationId) then
+                            task.wait(animations[v.Animation.AnimationId])
+                            dothetech = true
+                            lastcf = character.HumanoidRootPart.CFrame
+
+                            v.Stopped:Connect(function()
+                                dothetech = false
+                            end)
+
+                            repeat
+                                task.wait()
+                                workspace.Camera.CameraType = Enum.CameraType.Scriptable
+                                character.HumanoidRootPart.CFrame = CFrame.new(0, -300, 0)
+                                character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+                                character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                            until not dothetech
+
+                            task.wait(0.1)
+                            character.HumanoidRootPart.CFrame = lastcf
+                            workspace.Camera.CameraType = Enum.CameraType.Custom
+                            workspace.Camera.CameraSubject = character.Humanoid
+                            task.wait(1)
+                        end
+                    end
+                end
+            end)
+            coroutine.resume(getgenv().loop)
+        else
+            -- Stop the loop
+            if getgenv().loop then
+                coroutine.close(getgenv().loop)
+                getgenv().loop = nil
+            end
+        end
+    end
+})
+
 
 local Section = Tab:Section({
     text = "Anti death"
