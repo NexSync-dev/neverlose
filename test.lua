@@ -631,7 +631,7 @@ local function createESP(player)
     task.spawn(function()
         while ESPEnabled and humanoid.Parent do
             updateESP()
-            task.wait(0.1)
+            task.wait(0)
         end
         screenGui:Destroy()
     end)
@@ -639,7 +639,7 @@ end
 
 -- Toggle the ESP
 Section:Toggle({
-    text = "CS:GO ESP not workie",
+    text = "CS:GO ESP weird",
     state = ESPEnabled, -- Default state
     callback = function(state)
         ESPEnabled = state
@@ -895,6 +895,10 @@ function ifind(t, a)
     return false
 end
 
+local Section = Tab:Section({
+    text = "insta kill garou normal"
+})
+
 -- The toggle from your GUI
 Section:Toggle({
     text = "insta kill normal",
@@ -1035,9 +1039,281 @@ Section:Dropdown({
     end
 })
 
+local Section = Tab:Section({
+    text = "No animations"
+})
+
+local stopAnimations = false -- Default state of the toggle
+
+-- Toggle to enable/disable stopping animations
+Section:Toggle({
+    text = "Stop Animations",
+    state = false, -- Default is off
+    callback = function(state)
+        stopAnimations = state
+        print("Stop Animations toggled: ", stopAnimations)
+    end
+})
+
+-- Function to stop all animations on the character
+local function stopAllAnimations(character)
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid then return end
+
+    -- Prevent new animations from being played
+    humanoid.Animator.AnimationPlayed:Connect(function(animationTrack)
+        if stopAnimations then
+            animationTrack:Stop() -- Stops the animation immediately
+            print("Animation prevented: " .. animationTrack.Animation.AnimationId)
+        end
+    end)
+
+    -- Stop any currently running animations when toggle is turned on
+    if stopAnimations then
+        for _, track in ipairs(humanoid.Animator:GetPlayingAnimationTracks()) do
+            track:Stop()
+            print("Stopped currently playing animation: " .. track.Animation.AnimationId)
+        end
+    end
+end
+
+-- Listen for character respawn and apply animation prevention
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+player.CharacterAdded:Connect(function(character)
+    -- Wait for the character to fully load
+    character:WaitForChild("HumanoidRootPart")
+    character:WaitForChild("Humanoid")
+    stopAllAnimations(character)
+end)
+
+-- Apply to the current character (if it exists)
+if player.Character then
+    stopAllAnimations(player.Character)
+end
+
 
 local Section = Tab:Section({
-    text = "Insta Kill Garou"
+    text = "TP with move"
+})
+
+-- Place coordinates for dropdown
+local dropdownOptions = {
+    ["None"] = nil, -- Default option for no teleportation
+    ["Left Mountain"] = Vector3.new(376.96, 699.10, 362.13),
+    ["Right Mountain"] = Vector3.new(236.28, 699.10, 415.91),
+    ["Looking Down"] = Vector3.new(4.35, 652.52, -336.13),
+    ["Middle of the Map"] = Vector3.new(142.37, 440.76, 22.41),
+    ["Gate 1"] = Vector3.new(291.19, 439.51, 375.03),
+    ["Gate 2"] = Vector3.new(10.45, 439.51, -306.24),
+    ["Death Counter Room"] = Vector3.new(-65.18, 29.25, 20347.43),
+    ["Atomic Room"] = Vector3.new(1064.54, 131.29, 23007.78)
+}
+
+-- Default selection
+local chosenLocation = dropdownOptions["None"]
+
+-- Create Dropdown
+Section:Dropdown({
+    text = "Choose Location",
+    list = {"None", "Left Mountain", "Right Mountain", "Looking Down", "Middle of the Map", "Gate 1", "Gate 2", "Death Counter Room", "Atomic Room"},
+    default = "None",
+    callback = function(selected)
+        chosenLocation = dropdownOptions[selected]
+        print("Selected Location: " .. selected)
+    end
+})
+
+-- Function to connect the AnimationPlayed event
+local function connectAnimationEvent(character)
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid then return end
+
+    humanoid.Animator.AnimationPlayed:Connect(function(animationTrack)
+        local animationId = tostring(animationTrack.Animation.AnimationId):match("%d+")
+        if animationId == "12273188754" or animationId == "12296113986" then
+            print("Animation triggered: " .. animationId)
+            if chosenLocation then
+                character:SetPrimaryPartCFrame(CFrame.new(chosenLocation))
+                print("Teleported to: " .. tostring(chosenLocation))
+            else
+                print("No location selected. Teleportation skipped.")
+            end
+        end
+    end)
+end
+
+-- Listen for character respawn
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+player.CharacterAdded:Connect(function(character)
+    -- Wait for the character to fully load
+    character:WaitForChild("HumanoidRootPart")
+    character:WaitForChild("Humanoid")
+    connectAnimationEvent(character)
+end)
+
+-- Connect to the current character (if it exists)
+if player.Character then
+    connectAnimationEvent(player.Character)
+end
+
+local Section = Tab:Section({
+    text = "TP"
+})
+
+local chosenLocation = Vector3.new(0, 0, 0) -- Default teleport location
+
+-- Place coordinates for dropdown (adjust as needed)
+local dropdownOptions = {
+    ["None"] = nil, -- Default option for no teleportation
+    ["Left Mountain"] = Vector3.new(376.96, 699.10, 362.13),
+    ["Right Mountain"] = Vector3.new(236.28, 699.10, 415.91),
+    ["Looking Down"] = Vector3.new(4.35, 652.52, -336.13),
+    ["Middle of the Map"] = Vector3.new(142.37, 440.76, 22.41),
+    ["Gate 1"] = Vector3.new(291.19, 439.51, 375.03),
+    ["Gate 2"] = Vector3.new(10.45, 439.51, -306.24),
+    ["Death Counter Room"] = Vector3.new(-65.18, 29.25, 20347.43),
+    ["Atomic Room"] = Vector3.new(1064.54, 131.29, 23007.78)
+}
+
+-- Create Dropdown
+Section:Dropdown({
+    text = "Choose Location to Teleport",
+    list = {"None", "Left Mountain", "Right Mountain", "Looking Down", "Middle of the Map", "Gate 1", "Gate 2", "Death Counter Room", "Atomic Room"},
+    default = "None",
+    callback = function(selected)
+        chosenLocation = dropdownOptions[selected]
+        print("Selected Location: " .. selected)
+    end
+})
+
+-- Button to manually teleport
+Section:Button({
+    text = "Teleport Now",
+    callback = function()
+        if chosenLocation then
+            local character = game.Players.LocalPlayer.Character
+            if character then
+                -- Teleport to selected location
+                character:SetPrimaryPartCFrame(CFrame.new(chosenLocation))
+                print("Teleported to: " .. tostring(chosenLocation))
+            else
+                print("Character not found.")
+            end
+        else
+            print("No location selected.")
+        end
+    end
+})
+
+local chosenPlayer = nil -- Default to no player selected
+
+-- Create Dropdown for player selection
+local playerNames = {} -- Table to store player names for dropdown options
+
+for _, player in ipairs(game.Players:GetPlayers()) do
+    table.insert(playerNames, player.Name) -- Add player names to the list
+end
+
+-- Create Dropdown for selecting a player
+Section:Dropdown({
+    text = "Choose Player to Teleport To",
+    list = playerNames,
+    default = "None",
+    callback = function(selected)
+        if selected == "None" then
+            chosenPlayer = nil
+        else
+            chosenPlayer = game.Players:FindFirstChild(selected)
+        end
+        print("Selected Player: " .. (chosenPlayer and chosenPlayer.Name or "None"))
+    end
+})
+
+-- Button to manually teleport to the selected player
+Section:Button({
+    text = "Teleport to Player",
+    callback = function()
+        if chosenPlayer then
+            local character = game.Players.LocalPlayer.Character
+            if character and chosenPlayer.Character then
+                -- Teleport to the chosen player's position
+                character:SetPrimaryPartCFrame(chosenPlayer.Character.HumanoidRootPart.CFrame)
+                print("Teleported to player: " .. chosenPlayer.Name)
+            else
+                print("Player or character not found.")
+            end
+        else
+            print("No player selected.")
+        end
+    end
+})
+
+
+local Section = Tab:Section({
+    text = "Insta Kill Garou TP"
+})
+
+local speed = 10 -- Default speed value
+local canChangeSpeed = false -- Controls whether the speed can be changed
+
+-- Function to set player speed
+local function setPlayerSpeed()
+    -- Ensure the character exists and the humanoid is available
+    local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = speed
+    end
+end
+
+-- Toggle for controlling whether the speed can be modified
+Section:Toggle({
+    text = "Toggle Speed Control",
+    state = false, -- Default boolean
+    callback = function(boolean)
+        print("Speed control toggle: ", boolean)
+        if boolean then
+            -- Enable speed adjustment if toggle is on
+            canChangeSpeed = true
+        else
+            -- Disable speed adjustment if toggle is off
+            canChangeSpeed = false
+        end
+    end
+})
+
+-- Slider for controlling speed
+Section:Slider({
+    text = "Set Speed",
+    min = 30, -- Minimum speed value
+    max = 1000, -- Maximum speed value
+    callback = function(number)
+        if canChangeSpeed then
+            -- Make sure the speed stays within the defined limits
+            speed = math.clamp(number, 10, 100)
+            -- Set the player's walk speed to the slider value
+            setPlayerSpeed()  -- Apply the speed immediately
+            print("Speed set to: ", speed)
+        else
+            -- If toggle is off, the speed can't be changed
+            print("Speed control is disabled.")
+        end
+    end
+})
+
+-- Continuously set the speed
+game:GetService("RunService").Heartbeat:Connect(function()
+    if canChangeSpeed then
+        setPlayerSpeed() -- Continuously apply the speed if enabled
+    end
+end)
+
+
+local Section = Tab:Section({
+    text = "Insta Kill Garou TP"
 })
 
 
@@ -1100,7 +1376,7 @@ Section:Dropdown({
                 while tick() - startTime < duration do
                     -- Calculate position closer behind the target player (using a smaller multiplier for closer distance)
                     local targetPosition = targetRootPart.Position
-                    local behindTargetPosition = targetPosition - (targetRootPart.CFrame.LookVector * 3)  -- Adjust to a closer distance, e.g., *3 instead of *5
+                    local behindTargetPosition = targetPosition - (targetRootPart.CFrame.LookVector * 2)  -- Adjust to a closer distance, e.g., *3 instead of *5
                     currentPlayer:SetPrimaryPartCFrame(CFrame.new(behindTargetPosition))
 
                     -- Make the player look at the target while behind them
@@ -1195,5 +1471,6 @@ while true do
         dropdown.list = updatedPlayersList  -- Update the dropdown list directly
     end
 end
+
 
 end
