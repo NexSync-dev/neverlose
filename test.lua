@@ -14,6 +14,7 @@ end
 local themouse = game.Players.LocalPlayer:GetMouse()
 
 local isVisible = true -- Track visibility state
+local mainFrame -- Declare a variable for the main frame
 
 local function Notify(tt, tx)
     game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -1246,10 +1247,20 @@ function Library:Window(options)
     return tabsections
 end
 
+-- Function to initialize the GUI and set the main frame
+local function initializeGUI()
+    -- Assuming 'Body' is the main frame of your GUI
+    mainFrame = Body -- Replace 'Body' with the actual reference to your main frame
+end
+
 -- Function to toggle visibility
 local function toggleVisibility()
-    isVisible = not isVisible
-    sectionFrame.Visible = isVisible -- Assuming sectionFrame is the main frame of your GUI
+    if mainFrame then -- Check if mainFrame is defined
+        isVisible = not isVisible
+        mainFrame.Visible = isVisible -- Set visibility
+    else
+        warn("Main frame is not defined.")
+    end
 end
 
 -- Keybind to toggle visibility (Right Control)
@@ -1261,5 +1272,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
         end
     end
 end)
+
+-- Call the initialize function to set up the GUI
+initializeGUI()
 
 return Library
