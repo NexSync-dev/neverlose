@@ -1251,6 +1251,7 @@ end
 local function initializeGUI()
     -- Assuming 'Body' is the main frame of your GUI
     mainFrame = Body -- Replace 'Body' with the actual reference to your main frame
+    mainFrame.Visible = isVisible -- Set initial visibility
 end
 
 -- Function to toggle visibility
