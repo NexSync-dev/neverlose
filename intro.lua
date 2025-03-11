@@ -1,0 +1,6 @@
+local NotificationLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/IceMinisterq/Notification-Library/Main/Library.lua"))()
+NotificationLibrary:SendNotification("Info", "This script isnt the best as I work alone and some features may not be up to what you expect", 8)
+wait(9)
+NotificationLibrary:SendNotification("Warning", "If something doesnt work after you reset or die,try disabling and enabling again", 7)
+wait(8)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlosegui/refs/heads/main/test.lua", true))()
