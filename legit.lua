@@ -36,7 +36,7 @@ RunService.RenderStepped:Connect(function()
 	local Hitpart = Player.Character:FindFirstChild(Aimbot.Hitpart);
 	if not Hitpart then return; end
 	
-	-- Smooth aiming
-	local TargetCFrame = CFrame.new(Camera.CFrame.Position, Hitpart.Position);
-	Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, math.clamp(getgenv().Aimbot_Smoothness / 10, 0, 1));
+	-- Proper smoothness scaling: Higher values = slower aim
+	local SmoothFactor = math.clamp(1 - (getgenv().Aimbot_Smoothness / 10), 0.1, 1);
+	Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, Hitpart.Position), SmoothFactor);
 end)
