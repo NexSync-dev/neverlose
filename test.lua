@@ -1,5 +1,5 @@
 -- Check game
-if game.PlaceId == 10449761463 then
+if game.PlaceId == 10449761463 or game.PlaceId == 131048399685555 then
     local CurrentVersion = "TSB - Beta 0.1"
     
     -- GUI Library
@@ -799,7 +799,7 @@ local Section = Tab:Section({
 })
 
 Section:Button({
-    text = "Button",
+    text = "M1 reset(execute again after you die)",
     callback = function()
         loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlosegui/refs/heads/main/m1reset.lua"))()
     end,
@@ -1352,7 +1352,7 @@ Section:Button({
 })
 
 local Section = Tab:Section({
-    text = "Insta Kill Garou TP"
+    text = "Speed"
 })
 
 local speed = 10 -- Default speed value
