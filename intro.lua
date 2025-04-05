@@ -1,6 +1,12 @@
-local NotificationLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/IceMinisterq/Notification-Library/Main/Library.lua"))()
-NotificationLibrary:SendNotification("Info", "This script isnt the best as I work alone and some features may not be up to what you expect", 8)
-wait(9)
-NotificationLibrary:SendNotification("Warning", "If something doesnt work after you reset or die,try disabling and enabling again", 7)
-wait(8)
-loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlosegui/refs/heads/main/test.lua", true))()
+local NotificationLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/lib.lua"))()
+
+-- Example Usage:
+NotificationLib:Notify("welcome to NexSync hub", "info")(2)
+task.wait(1)
+NotificationLib:Notify("Loading GUI", "info")(3)
+task.wait(1)
+NotificationLib:Notify("This may not be as good as you expect", "warning")(4)
+task.wait(1)
+NotificationLib:Notify("If something doesnt work after dying,try disabling and re-enabling it or fully re-executing", "warning")(5)
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/test.lua"))()
