@@ -1,4 +1,4 @@
---// Skeet-Style Notification System (custom sound ready)
+--// Skeet-Style Notification System
 
 local NotificationSystem = {}
 
@@ -6,7 +6,7 @@ local NotificationSystem = {}
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
---// Setup GUI
+--// Setup the main GUI
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "CheatNotificationUI"
 ScreenGui.ResetOnSpawn = false
@@ -20,22 +20,10 @@ NotificationHolder.Position = UDim2.new(1, -310, 0, 10)
 NotificationHolder.BackgroundTransparency = 1
 NotificationHolder.Parent = ScreenGui
 
---// Add a single sound instance
-local Sound = Instance.new("Sound")
-Sound.Name = "NotificationSound"
-Sound.SoundId = "rbxassetid://70850789408719" -- << Replace this with your sound ID
-Sound.Volume = 1
-Sound.PlayOnRemove = true
-Sound.Parent = ScreenGui
-
---// Function to create notifications
+--// Function to create and show notifications
 function NotificationSystem:CreateNotification(text, color, duration)
-	color = color or Color3.fromRGB(0, 162, 255)
+	color = color or Color3.fromRGB(0, 162, 255)  -- Default blue accent
 	duration = duration or 3
-
-	-- Clone and play the sound (play-on-remove method = instant + no delays)
-	local notificationSound = Sound:Clone()
-	notificationSound:Play()  -- Play the sound immediately when creating the notification
 
 	-- Create notification frame
 	local notif = Instance.new("Frame")
@@ -44,8 +32,8 @@ function NotificationSystem:CreateNotification(text, color, duration)
 	notif.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 	notif.BorderColor3 = color
 	notif.BorderSizePixel = 2
-	notif.BackgroundTransparency = 1
 	notif.ClipsDescendants = true
+	notif.BackgroundTransparency = 1
 	notif.Parent = NotificationHolder
 
 	-- Create text label for the notification
@@ -60,7 +48,7 @@ function NotificationSystem:CreateNotification(text, color, duration)
 	label.TextSize = 16
 	label.Parent = notif
 
-	-- Add UI stroke for the border
+	-- Create subtle UI stroke effect for sharpness
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = 1
 	stroke.Color = color
@@ -90,4 +78,8 @@ function NotificationSystem:CreateNotification(text, color, duration)
 	end)
 end
 
+--// Example usage of the system (This is just for testing, you can remove it)
+NotificationSystem:CreateNotification("Loading", Color3.fromRGB(0, 255, 140), 3)
+
 return NotificationSystem
+loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlosegui/refs/heads/main/test.lua", true))()
