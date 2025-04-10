@@ -1,4 +1,4 @@
-local NotificationLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/lib.lua"))()
+local NotificationLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/message.lua"))()
 
 -- Example Usage:
 NotificationLib:Notify("welcome to NexSync hub", "info")(2)
