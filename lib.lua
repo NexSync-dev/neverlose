@@ -775,35 +775,37 @@ function Library:Window(options)
                     dropListLayout.SortOrder = Enum.SortOrder.LayoutOrder
                     Resize(25)
 
-                    for i,v in next, options.list do
-                        local dropdownBtn = Instance.new("TextButton")
-                        local Count = 1
-
-                        dropdownBtn.Name = "dropdownBtn"
-                        dropdownBtn.Parent = dropdownList
-                        dropdownBtn.BackgroundColor3 = Color3.fromRGB(234, 239, 245)
-                        dropdownBtn.BackgroundTransparency = 1.000
-                        dropdownBtn.BorderSizePixel = 0
-                        dropdownBtn.Position = UDim2.new(-0.0110929646, 0, 0.0305557251, 0)
-                        dropdownBtn.Size = UDim2.new(0, 87, 0, 18)
-                        dropdownBtn.AutoButtonColor = false
-                        dropdownBtn.Font = Enum.Font.Gotham
-                        dropdownBtn.TextColor3 = Color3.fromRGB(234, 239, 245)
-                        dropdownBtn.TextSize = 12.000
-                        dropdownBtn.Text = v
-                        dropdownBtn.ZIndex = 15
-                        clickEffect({button = dropdownBtn, amount = 5})
-
-                        Count = Count + 1
-                        dropdownList.ZIndex -= Count
-                        DropYSize = DropYSize + 18
-
-                        dropdownBtn.MouseButton1Click:Connect(function()
-                            dropdownText.Text = " " .. v
-                            options.callback(v)
-                        end)
+                    local function populateList(list)
+                        DropYSize = 0
+                        dropdownList:ClearAllChildren()
+                        dropListLayout.Parent = dropdownList
+                    
+                        for i,v in next, list do
+                            local dropdownBtn = Instance.new("TextButton")
+                            dropdownBtn.Name = "dropdownBtn"
+                            dropdownBtn.Parent = dropdownList
+                            dropdownBtn.BackgroundColor3 = Color3.fromRGB(234, 239, 245)
+                            dropdownBtn.BackgroundTransparency = 1.000
+                            dropdownBtn.BorderSizePixel = 0
+                            dropdownBtn.Size = UDim2.new(0, 87, 0, 18)
+                            dropdownBtn.AutoButtonColor = false
+                            dropdownBtn.Font = Enum.Font.Gotham
+                            dropdownBtn.TextColor3 = Color3.fromRGB(234, 239, 245)
+                            dropdownBtn.TextSize = 12.000
+                            dropdownBtn.Text = v
+                            dropdownBtn.ZIndex = 15
+                            clickEffect({button = dropdownBtn, amount = 5})
+                    
+                            DropYSize = DropYSize + 18
+                    
+                            dropdownBtn.MouseButton1Click:Connect(function()
+                                dropdownText.Text = " " .. v
+                                options.callback(v)
+                            end)
+                        end
                     end
-                end
+                    
+                    populateList(options.list)                    
 
                 function elements:Textbox(options)
                     if not options.text or not options.value or not options.callback then Notify("Textbox", "Missing arguments!") return end
@@ -833,7 +835,6 @@ function Library:Window(options)
                     textBoxLabel.TextColor3 = Color3.fromRGB(157, 171, 182)
                     textBoxLabel.TextSize = 14.000
                     textBoxLabel.TextXAlignment = Enum.TextXAlignment.Left
-
                     textBox.Name = "textBox"
                     textBox.Parent = Textbox
                     textBox.AnchorPoint = Vector2.new(0.5, 0.5)
