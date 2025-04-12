@@ -1,10 +1,15 @@
--- Check game
 if game.PlaceId == 10449761463 or game.PlaceId == 131048399685555 then
-    local CurrentVersion = "TSB - Beta 0.1"
+    local CurrentVersion = "TSB - Beta 2"
     
     -- GUI Library
-    local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/GhostDuckyy/UI-Libraries/main/Neverlose/source.lua"))()
+    local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/lib.lua"))()
+    local UserInputService = game:GetService("UserInputService")
 
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and input.KeyCode == Enum.KeyCode.Insert then
+            Library:Toggle()
+        end
+    end)
     -- Main GUI
     local Window = Library:Window({
         text = "TSB Script"
@@ -1259,6 +1264,7 @@ if player.Character then
     connectAnimationEvent(player.Character)
 end
 
+
 local Section = Tab:Section({
     text = "TP"
 })
@@ -1569,6 +1575,5 @@ while true do
         dropdown.list = updatedPlayersList  -- Update the dropdown list directly
     end
 end
-
 
 end
