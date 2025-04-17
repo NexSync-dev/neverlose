@@ -1022,11 +1022,11 @@ Section:Toggle({
                     deathCutscene:Destroy()
                 end
             end
-            game.StarterGui:SetCore("SendNotification", {
+            game:GetService("StarterGui"):SetCore("SendNotification", {
                 Title = "I aint making this",
                 Text = "Use Anti Void or this wont work",
                 Duration = 5
-            })
+            })            
 
             -- Function to set up the player after respawn
             local function setupPlayer(character)
