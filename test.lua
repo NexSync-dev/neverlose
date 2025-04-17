@@ -137,7 +137,7 @@ if game.PlaceId == 10449761463 or game.PlaceId == 131048399685555 then
 
 -- Existing code for the Auto Combo section
 local Section = Tab:Section({
-    text = "Auto Combo"
+    text = "Auto Combo(its shit)"
 })
 
 -- Add the button inside the "Auto Combo" section
@@ -347,6 +347,68 @@ Section:Button({
 local Tab = TabSection:Tab({
     text = "ESP",
     icon = "rbxassetid://7999345313",
+})
+
+local Section = Tab:Section({
+    text = "Lighting changer"
+})
+
+local lighting = game:GetService("Lighting")
+local myTab = Section -- your tab initialization here (e.g., the GUI library you're using)
+
+-- Default selected color (e.g., Pink)
+local selectedColor = Color3.fromRGB(255, 182, 193) 
+
+-- Flag to control whether lighting change is enabled
+local lightingEnabled = false
+
+-- Function to change lighting to a specific color
+local function changeLightingColor(color)
+    if not color then return end
+
+    lighting.Ambient = color
+    lighting.OutdoorAmbient = color
+
+    local sky = lighting:FindFirstChild("Sky")
+    if not sky then
+        sky = Instance.new("Sky")
+        sky.Name = "Sky"
+        sky.Parent = lighting
+    end
+
+    sky.SkyboxBk = color
+    sky.SkyboxDn = color
+    sky.SkyboxFt = color
+    sky.SkyboxLf = color
+    sky.SkyboxRt = color
+    sky.SkyboxUp = color
+
+    lighting.FogColor = color
+end
+
+-- Color Picker to choose lighting color
+myTab:Colorpicker({
+    text = "Pick a Lighting Color",
+    color = selectedColor,
+    callback = function(color)
+        selectedColor = color
+        if lightingEnabled then
+            changeLightingColor(color)
+        end
+    end
+})
+
+-- Toggle to enable or disable lighting color changes
+myTab:Toggle({
+    text = "Enable Lighting Change",
+    callback = function(state)
+        lightingEnabled = state
+        if lightingEnabled then
+            changeLightingColor(selectedColor)
+        else
+            changeLightingColor(Color3.fromRGB(255, 255, 255))
+        end
+    end
 })
 
 local Section = Tab:Section({
@@ -583,6 +645,7 @@ function toggleESP(state)
     end
 end
 
+
 Section:Toggle({
     text = "CS:GO ESP weird",
     state = ESPEnabled,
@@ -811,9 +874,284 @@ Section:Button({
 })
 
 local Section = Tab:Section({
-    text = "Trashcan fling?"
+    text = "Trashcan aimbot"
 })
 
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HRP = Character:WaitForChild("HumanoidRootPart")
+local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+
+local selectedMode = "closest to player"
+local trackConnection
+
+-- Dropdown
+Section:Dropdown({
+    text = "Targeting Mode",
+    default = "closest to player",
+    list = {"closest to player", "closest to mouse"},
+    callback = function(selected)
+        selectedMode = selected
+    end
+})
+
+-- Helper: Get closest player to character
+local function getClosestToPlayer()
+    local closest, dist = nil, math.huge
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local d = (plr.Character.HumanoidRootPart.Position - HRP.Position).Magnitude
+            if d < dist then
+                dist = d
+                closest = plr
+            end
+        end
+    end
+    return closest
+end
+
+-- Helper: Get closest player to mouse
+local function getClosestToMouse()
+    local closest, dist = nil, math.huge
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local screenPos, onScreen = Camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local d = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
+                if d < dist then
+                    dist = d
+                    closest = plr
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- Toggle
+Section:Toggle({
+    text = "Enable TP on Animation",
+    callback = function(state)
+        if trackConnection then
+            trackConnection:Disconnect()
+            trackConnection = nil
+        end
+
+        if state then
+            trackConnection = Character.Humanoid.AnimationPlayed:Connect(function(track)
+                if track.Animation.AnimationId == "rbxassetid://13813955149" then
+                    local target
+                    if selectedMode == "closest to player" then
+                        target = getClosestToPlayer()
+                    else
+                        target = getClosestToMouse()
+                    end
+
+                    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                        local lastCF = HRP.CFrame
+
+                        -- Hide movement
+                        Camera.CameraType = Enum.CameraType.Scriptable
+
+                        -- Optional: Wait before teleportation (adjust the delay as needed)
+
+                        -- Teleport to the target's position (around the target)
+                        local targetHRP = target.Character.HumanoidRootPart
+                        local origin = targetHRP.Position
+                        local radius = 5
+                        local angle = math.rad(math.random(0, 360))
+                        local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+                        local destination = origin + offset
+
+                        -- Teleport to the calculated destination and look at the target
+                        HRP.CFrame = CFrame.lookAt(destination, origin)
+                        HRP.AssemblyLinearVelocity = Vector3.zero
+                        HRP.AssemblyAngularVelocity = Vector3.zero
+
+                        -- Keep looking at the target
+                        local connection = game:GetService("RunService").Heartbeat:Connect(function()
+                            HRP.CFrame = CFrame.lookAt(HRP.Position, targetHRP.Position)
+                        end)
+
+                        -- Wait for animation to stop
+                        track.Stopped:Wait()
+
+                        -- Add delay before teleporting back (adjust delay here)
+                        task.wait(0.5)  -- Add 0.5 second delay before returning
+
+                        -- Teleport back to the original position
+                        HRP.CFrame = lastCF
+                        HRP.AssemblyLinearVelocity = Vector3.zero
+                        HRP.AssemblyAngularVelocity = Vector3.zero
+
+                        -- Restore camera
+                        Camera.CameraType = Enum.CameraType.Custom
+                        Camera.CameraSubject = Character.Humanoid
+
+                        -- Disconnect the look-at connection
+                        connection:Disconnect()
+                    end
+                end
+            end)
+        end
+    end
+})
+
+
+local Tab = TabSection:Tab({
+    text = "General HVH things",
+    icon = "rbxassetid://7999345313",
+})
+
+local Section = Tab:Section({
+    text = "Anti DC"
+})
+
+-- Toggle button to enable/disable feature
+Section:Toggle({
+    text = "Anti Death Counter",
+    callback = function(state)
+        if state then
+            -- Delete Workspace.Cutscenes.Death Cutscene if it exists
+            local cutscenesFolder = workspace:FindFirstChild("Cutscenes")
+            if cutscenesFolder then
+                local deathCutscene = cutscenesFolder:FindFirstChild("Death Cutscene")
+                if deathCutscene then
+                    deathCutscene:Destroy()
+                end
+            end
+
+            -- Function to set up the player after respawn
+            local function setupPlayer(character)
+                local humanoid = character:WaitForChild("Humanoid")
+                local hrp = character:WaitForChild("HumanoidRootPart")
+                local camera = workspace.CurrentCamera
+
+                -- Target animation ID
+                local targetAnimId = "rbxassetid://11343250001"
+                local targetAssetId = targetAnimId:match("%d+")
+
+                -- Animation monitor
+                humanoid.AnimationPlayed:Connect(function(track)
+                    local id = track.Animation.AnimationId:match("%d+")
+                    if id == targetAssetId then
+                        local originalCFrame = hrp.CFrame
+                        hrp.CFrame = CFrame.new(0, -497, 0)
+                        task.wait(3)
+                        hrp.CFrame = originalCFrame
+                        camera.CameraSubject = humanoid
+                        camera.CameraType = Enum.CameraType.Custom
+                    end
+                end)
+            end
+
+            -- Initial setup when player spawns
+            local Players = game:GetService("Players")
+            local player = Players.LocalPlayer
+            local character = player.Character or player.CharacterAdded:Wait()
+            setupPlayer(character)
+
+            -- Connect to the event when the player respawns
+            player.CharacterAdded:Connect(function(newCharacter)
+                setupPlayer(newCharacter)
+            end)
+        else
+
+        end
+    end
+})
+
+local Section = Tab:Section({
+    text = "Anti Fling"
+})
+
+-- init
+if not game.IsLoaded(game) then
+    repeat task.wait() until game.IsLoaded(game)
+end
+
+-- variables
+local RunService = game:GetService("RunService")
+local Client = game:GetService("Players").LocalPlayer
+local AntiFlingEnabled = false 
+
+-- Cache of parts to avoid reprocessing
+local processedParts = {}
+
+-- AntiFling function
+function AntiFling(part)
+    if part and not processedParts[part] then
+        processedParts[part] = true
+        part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+        part.Velocity = Vector3.new(0, 0, 0)
+        part.RotVelocity = Vector3.new(0, 0, 0)
+        part.CanCollide = false
+    end
+end
+
+-- Connect to heartbeat for AntiFling on existing parts
+for _, part in next, game:GetDescendants() do
+    if part and part:IsA("Part") and part.Parent ~= Client.Character and part.Name == "HumanoidRootPart" then
+        AntiFling(part)
+    end
+end
+
+-- Handle new parts being added
+workspace.DescendantAdded:Connect(function(part)
+    if AntiFlingEnabled and part:IsA("Part") and part.Name == "HumanoidRootPart" and part.Parent ~= game.Players.LocalPlayer.Character then
+        task.wait(2) -- Delay to make sure part is fully added
+        AntiFling(part)
+    end
+end)
+
+-- Handle toggling AntiFling
+Section:Toggle({
+    text = "Enable AntiFling (may lag)",
+    callback = function(state)
+        AntiFlingEnabled = state
+        if not AntiFlingEnabled then
+            -- Reset any modifications when disabled
+            for part, _ in pairs(processedParts) do
+                if part and part:IsA("Part") then
+                    part.CustomPhysicalProperties = nil
+                    part.Velocity = Vector3.new(0, 0, 0)
+                    part.RotVelocity = Vector3.new(0, 0, 0)
+                    part.CanCollide = true
+                end
+            end
+            processedParts = {}
+        end
+    end
+})
+
+ 
+ local Section = Tab:Section({
+    text = "Anti Void"
+})
+
+local teleportPosition = Vector3.new(142.37, 440.76, 22.41)
+local isEnabled = false
+
+Section:Toggle({ 
+    text = "Anti Void",
+    callback = function(state)
+        isEnabled = state
+    end
+})
+
+game:GetService("RunService").Heartbeat:Connect(function()
+    if isEnabled then
+        local player = game.Players.LocalPlayer
+        if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
+            if hrp.Position.Y < -400 then
+                hrp.CFrame = CFrame.new(teleportPosition)
+            end
+        end
+    end
+end)
 
 
 local Tab = TabSection:Tab({
@@ -1268,6 +1606,53 @@ end
 local Section = Tab:Section({
     text = "TP"
 })
+
+local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local mouse = player:GetMouse()
+
+local teleportKey = Enum.KeyCode.T
+local teleportEnabled = false
+
+-- Animation setup
+local anim = Instance.new("Animation")
+anim.AnimationId = "rbxassetid://15957361339"
+local track = humanoid:LoadAnimation(anim)
+
+-- Toggle for enabling/disabling teleport
+Section:Toggle({
+    text = "Enable Teleport",
+    callback = function(state)
+        teleportEnabled = state
+        print("Teleport Enabled: " .. tostring(state))
+
+        if state then
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "Teleport Keybind",
+                Text = "Keybind for tp is 'T'",
+                Duration = 5
+            })
+        end
+    end
+})
+
+
+-- Teleport on key press
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if teleportEnabled and input.KeyCode == teleportKey then
+        local pos = mouse.Hit.Position + Vector3.new(0, 2.5, 0)
+        character:WaitForChild("HumanoidRootPart").CFrame = CFrame.new(pos)
+        track:Play()
+    end
+end)
+
+
 
 local chosenLocation = Vector3.new(0, 0, 0) -- Default teleport location
 
