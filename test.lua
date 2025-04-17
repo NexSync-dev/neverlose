@@ -1022,7 +1022,7 @@ Section:Toggle({
                     deathCutscene:Destroy()
                 end
             end
-            StarterGui:SetCore("SendNotification", {
+            game.StarterGui:SetCore("SendNotification", {
                 Title = "I aint making this",
                 Text = "Use Anti Void or this wont work",
                 Duration = 5
