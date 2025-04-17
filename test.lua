@@ -1178,11 +1178,28 @@ local Section = Tab:Section({
     text = "No Stun"
 })
 
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
 local isEnabled = false
+
+-- Function to check and remove NoRotate
+local function checkForNoRotate()
+    if character then
+        for _, item in ipairs(character:GetChildren()) do
+            if item.Name == "NoRotate" then
+                item:Destroy()
+                break
+            end
+        end
+    end
+end
 
 -- Function to check for ragdoll, freeze, and slowed effects
 local function checkRagdoll()
-    local Character = game.Players.LocalPlayer.Character
+    local Character = player.Character
     if Character then
         if Character:FindFirstChild("Ragdoll") or Character:FindFirstChild("Freeze") or Character:FindFirstChild("Slowed") then
             -- Effects found, but no print statement
@@ -1192,45 +1209,53 @@ end
 
 -- Function to disable ragdoll, freeze, and slowed effects
 local function disableRagdoll()
-    local Character = game.Players.LocalPlayer.Character
+    local Character = player.Character
     if Character then
         local ragdoll = Character:FindFirstChild("Ragdoll")
         if ragdoll then
-            ragdoll:Destroy()  -- Removes the ragdoll object
+            ragdoll:Destroy()
         end
 
-        -- Handle Freeze
         local freeze = Character:FindFirstChild("Freeze")
         if freeze then
-            freeze:Destroy()  -- Removes the freeze effect
+            freeze:Destroy()
             local humanoid = Character:FindFirstChild("Humanoid")
             if humanoid and humanoid.WalkSpeed < 35 then
                 humanoid.WalkSpeed = 35
             end
-
-            -- Prevent floating
             local humanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
             if humanoidRootPart then
                 humanoidRootPart.Velocity = Vector3.new(humanoidRootPart.Velocity.X, 0, humanoidRootPart.Velocity.Z)
             end
         end
 
-        -- Handle Slowed
         local slowed = Character:FindFirstChild("Slowed")
         if slowed then
-            slowed:Destroy()  -- Removes the slowed effect
+            slowed:Destroy()
         end
     end
 end
 
--- Toggle function
+-- Main loop
+RunService.RenderStepped:Connect(function()
+    if isEnabled then
+        disableRagdoll()
+        checkForNoRotate()
+    end
+end)
+
+character:WaitForChild("Humanoid")
+checkForNoRotate()
+
+-- Toggle
 Section:Toggle({
     text = "Disable Stun",
-    state = false, -- Default state is false
-    callback = function(boolean)
-        isEnabled = boolean
+    state = false,
+    callback = function(bool)
+        isEnabled = bool
     end
 })
+
 
 -- Run the functions if the toggle is enabled
 game:GetService("RunService").RenderStepped:Connect(function()
