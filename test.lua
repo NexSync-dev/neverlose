@@ -1022,6 +1022,11 @@ Section:Toggle({
                     deathCutscene:Destroy()
                 end
             end
+            StarterGui:SetCore("SendNotification", {
+                Title = "I aint making this",
+                Text = "Use Anti Void or this wont work",
+                Duration = 5
+            })
 
             -- Function to set up the player after respawn
             local function setupPlayer(character)
@@ -1131,8 +1136,8 @@ Section:Toggle({
     text = "Anti Void"
 })
 
-local teleportPosition = Vector3.new(142.37, 440.76, 22.41)
 local isEnabled = false
+local platformMade = false
 
 Section:Toggle({ 
     text = "Anti Void",
@@ -1142,17 +1147,27 @@ Section:Toggle({
 })
 
 game:GetService("RunService").Heartbeat:Connect(function()
-    if isEnabled then
-        local player = game.Players.LocalPlayer
-        if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local hrp = player.Character.HumanoidRootPart
-            if hrp.Position.Y < -400 then
-                hrp.CFrame = CFrame.new(teleportPosition)
-            end
+    if isEnabled and not platformMade then
+        local platform = Instance.new("Part")
+        platform.Anchored = true
+        platform.Size = Vector3.new(1000, 10, 1000) -- super huge
+        platform.Position = Vector3.new(0, -500, 0)
+        platform.Name = "AntiVoidPlatform"
+        platform.Material = Enum.Material.ForceField
+        platform.Color = Color3.fromRGB(255, 255, 255)
+        platform.Transparency = 0.3
+        platform.CanCollide = true
+        platform.Parent = workspace
+
+        platformMade = true
+    elseif not isEnabled and platformMade then
+        local existing = workspace:FindFirstChild("AntiVoidPlatform")
+        if existing then
+            existing:Destroy()
         end
+        platformMade = false
     end
 end)
-
 
 local Tab = TabSection:Tab({
     text = "Blatant",
