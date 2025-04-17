@@ -3,6 +3,36 @@ if game.PlaceId == 10449761463 or game.PlaceId == 131048399685555 then
     
     -- GUI Library
     local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/lib.lua"))()
+    -- === Respawn-safe setup ===
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local LocalPlayer = Players.LocalPlayer
+
+    local characterConnections = {}
+
+function setupCharacter(character)
+    -- Disconnect old stuff
+    for _, conn in ipairs(characterConnections) do
+        conn:Disconnect()
+    end
+    table.clear(characterConnections)
+
+    -- Wait for character parts
+    local humanoid = character:WaitForChild("Humanoid")
+    local hrp = character:WaitForChild("HumanoidRootPart")
+
+    -- 🧠 MOVE per-character logic here (see Step 2)
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    coroutine.wrap(setupCharacter)(char)
+end)
+
+if LocalPlayer.Character then
+    coroutine.wrap(setupCharacter)(LocalPlayer.Character)
+end
+-- === End Respawn-safe setup ===
+
     local UserInputService = game:GetService("UserInputService")
 
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -145,7 +175,7 @@ Section:Button({
     text = "Saitama Combo",
     callback = function()
         local Player = game:GetService("Players").LocalPlayer
-        local Character = Player.Character
+        local Character = character
         local Communicate = Character:WaitForChild("Communicate")
 
         -- Function to fire a given action
@@ -266,7 +296,7 @@ Section:Button({
     text = "Garou Combo",
     callback = function()
         local Player = game:GetService("Players").LocalPlayer
-        local Character = Player.Character
+        local Character = character
         local Communicate = Character:WaitForChild("Communicate")
 
         -- Function to fire a given action
@@ -785,7 +815,7 @@ local playerStates = {}
 -- Function to check a player's inventory
 local function checkInventory(player)
     local backpack = player:FindFirstChild("Backpack")
-    local character = player.Character
+    local Character = haracter
 
     if backpack then
         local deathCounter = backpack:FindFirstChild("Death Counter")
@@ -797,14 +827,14 @@ local function checkInventory(player)
                 -- Remove the item from the inventory
                 deathCounter:Destroy()
                 -- Make the player glow red indefinitely
-                makeGlow(character, Color3.new(1, 0, 0), 0)
+                makeGlow(Character, Color3.new(1, 0, 0), 0)
             end
         else
             -- If Death Counter was detected but is now gone, glow yellow
             if playerStates[player] and playerStates[player].hasDeathCounter then
                 playerStates[player].hasDeathCounter = false
                 -- Make the player glow yellow for 10 seconds
-                makeGlow(character, Color3.new(1, 1, 0), 10)
+                makeGlow(Character, Color3.new(1, 1, 0), 10)
             end
         end
     end
@@ -879,13 +909,14 @@ local Section = Tab:Section({
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait() -- Corrected here
 local HRP = Character:WaitForChild("HumanoidRootPart")
 local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
 local selectedMode = "closest to player"
 local trackConnection
+
 
 -- Dropdown
 Section:Dropdown({
@@ -1055,8 +1086,8 @@ Section:Toggle({
             -- Initial setup when player spawns
             local Players = game:GetService("Players")
             local player = Players.LocalPlayer
-            local character = player.Character or player.CharacterAdded:Wait()
-            setupPlayer(character)
+            local Character = character or player.CharacterAdded:Wait()
+            setupPlayer(Character)
 
             -- Connect to the event when the player respawns
             player.CharacterAdded:Connect(function(newCharacter)
@@ -1181,7 +1212,7 @@ local Section = Tab:Section({
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
+local character = LocalPlayer.Character or player.CharacterAdded:Wait()
 
 local isEnabled = false
 
@@ -1199,7 +1230,7 @@ end
 
 -- Function to check for ragdoll, freeze, and slowed effects
 local function checkRagdoll()
-    local Character = player.Character
+    local Character = character
     if Character then
         if Character:FindFirstChild("Ragdoll") or Character:FindFirstChild("Freeze") or Character:FindFirstChild("Slowed") then
             -- Effects found, but no print statement
@@ -1209,7 +1240,7 @@ end
 
 -- Function to disable ragdoll, freeze, and slowed effects
 local function disableRagdoll()
-    local Character = player.Character
+    local Character = character
     if Character then
         local ragdoll = Character:FindFirstChild("Ragdoll")
         if ragdoll then
@@ -1448,7 +1479,7 @@ local Section = Tab:Section({
 local originalPosition
 
 Section:Dropdown({
-    text = "Anti Death",
+    text = "Anti Death(really dont use this)",
     list = {"True", "False"},  -- The options for the dropdown
     default = "False",  -- Default value
     callback = function(selectedOption)
@@ -1652,8 +1683,8 @@ local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 
 local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
+local Character = character or player.CharacterAdded:Wait()
+local humanoid = Character:WaitForChild("Humanoid")
 local mouse = player:GetMouse()
 
 local teleportKey = Enum.KeyCode.T
@@ -1687,7 +1718,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if teleportEnabled and input.KeyCode == teleportKey then
         local pos = mouse.Hit.Position + Vector3.new(0, 2.5, 0)
-        character:WaitForChild("HumanoidRootPart").CFrame = CFrame.new(pos)
+        Character:WaitForChild("HumanoidRootPart").CFrame = CFrame.new(pos)
         track:Play()
     end
 end)
