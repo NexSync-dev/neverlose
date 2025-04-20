@@ -1040,12 +1040,14 @@ local Section = Tab:Section({
     text = "Anti DC"
 })
 
--- Toggle button to enable/disable feature
 Section:Toggle({
     text = "Anti Death Counter",
     callback = function(state)
+        local Players = game:GetService("Players")
+        local player = Players.LocalPlayer
+
         if state then
-            -- Delete Workspace.Cutscenes.Death Cutscene if it exists
+            -- Delete death cutscene if it exists
             local cutscenesFolder = workspace:FindFirstChild("Cutscenes")
             if cutscenesFolder then
                 local deathCutscene = cutscenesFolder:FindFirstChild("Death Cutscene")
@@ -1053,23 +1055,22 @@ Section:Toggle({
                     deathCutscene:Destroy()
                 end
             end
+
             game:GetService("StarterGui"):SetCore("SendNotification", {
                 Title = "I aint making this",
                 Text = "Use Anti Void or this wont work",
                 Duration = 5
-            })            
+            })
 
-            -- Function to set up the player after respawn
+            -- Function to handle character setup
             local function setupPlayer(character)
                 local humanoid = character:WaitForChild("Humanoid")
                 local hrp = character:WaitForChild("HumanoidRootPart")
                 local camera = workspace.CurrentCamera
 
-                -- Target animation ID
                 local targetAnimId = "rbxassetid://11343250001"
                 local targetAssetId = targetAnimId:match("%d+")
 
-                -- Animation monitor
                 humanoid.AnimationPlayed:Connect(function(track)
                     local id = track.Animation.AnimationId:match("%d+")
                     if id == targetAssetId then
@@ -1083,18 +1084,15 @@ Section:Toggle({
                 end)
             end
 
-            -- Initial setup when player spawns
-            local Players = game:GetService("Players")
-            local player = Players.LocalPlayer
-            local Character = character or player.CharacterAdded:Wait()
-            setupPlayer(Character)
+            -- Initial setup
+            local character = player.Character or player.CharacterAdded:Wait()
+            setupPlayer(character)
 
-            -- Connect to the event when the player respawns
-            player.CharacterAdded:Connect(function(newCharacter)
-                setupPlayer(newCharacter)
-            end)
+            -- Re-setup after respawn
+            player.CharacterAdded:Connect(setupPlayer)
+
         else
-
+            -- Optional: disconnect events or reset state
         end
     end
 })
