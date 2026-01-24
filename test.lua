@@ -1,2033 +1,777 @@
-if game.PlaceId == 10449761463 or game.PlaceId == 131048399685555 then
-    local CurrentVersion = "TSB - Beta 2"
-    
-    -- GUI Library
-    local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/lib.lua"))()
-    -- === Respawn-safe setup ===
-    local Players = game:GetService("Players")
-    local RunService = game:GetService("RunService")
-    local LocalPlayer = Players.LocalPlayer
-
-    local characterConnections = {}
-
-function setupCharacter(character)
-    -- Disconnect old stuff
-    for _, conn in ipairs(characterConnections) do
-        conn:Disconnect()
-    end
-    table.clear(characterConnections)
-
-    -- Wait for character parts
-    local humanoid = character:WaitForChild("Humanoid")
-    local hrp = character:WaitForChild("HumanoidRootPart")
-
-    -- 🧠 MOVE per-character logic here (see Step 2)
-end
-
-LocalPlayer.CharacterAdded:Connect(function(char)
-    coroutine.wrap(setupCharacter)(char)
-end)
-
-if LocalPlayer.Character then
-    coroutine.wrap(setupCharacter)(LocalPlayer.Character)
-end
--- === End Respawn-safe setup ===
-
-    local UserInputService = game:GetService("UserInputService")
-
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if not gameProcessed and input.KeyCode == Enum.KeyCode.Insert then
-            Library:Toggle()
-        end
-    end)
-    -- Main GUI
-    local Window = Library:Window({
-        text = "TSB Script"
-    })
-    
-    local TabSection = Window:TabSection({
-        text = "Fighting"
-    })
-    
-    local Tab = TabSection:Tab({
-        text = "Legit",
-        icon = "rbxassetid://7999345313",
-    })
-
-    
-    local Section = Tab:Section({
-        text = "Auto Block"
-    })
-
-    -- Variable to store the bubble
-    local bubble
-    local currentRange = 10 -- Default range
-    local bubbleEnabled = false -- State to track if the bubble is enabled
-    local playerLooking = false -- State for looking at the player
-
-    Section:Slider({
-        text = "Range",
-        min = 10,
-        max = 100,
-        callback = function(number)
-            currentRange = number
-            if bubble and bubbleEnabled then
-                bubble.Size = Vector3.new(currentRange * 2, currentRange * 2, currentRange * 2)
-            end
-        end
-    })
-
-    -- Function to create the bubble
-    local function createBubble()
-        if not bubble then
-            bubble = Instance.new("Part")
-            bubble.Shape = Enum.PartType.Ball
-            bubble.Anchored = true
-            bubble.CanCollide = false
-            bubble.BrickColor = BrickColor.new("Bright red")
-            bubble.Transparency = 0.5
-            bubble.Size = Vector3.new(currentRange * 2, currentRange * 2, currentRange * 2)
-            bubble.Parent = workspace
-        end
-    end
-
-    -- Function to remove the bubble
-    local function removeBubble()
-        if bubble then
-            bubble:Destroy()
-            bubble = nil
-        end
-    end
-
-    -- Ensure the bubble follows the player
-    local RunService = game:GetService("RunService")
-    RunService.RenderStepped:Connect(function()
-        if bubbleEnabled and bubble then
-            local player = game.Players.LocalPlayer
-            local character = player.Character or player.CharacterAdded:Wait()
-            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-            if humanoidRootPart then
-                bubble.CFrame = humanoidRootPart.CFrame
-            end
-        end
-    end)
-
-    -- Function to make the player look at the nearest target
-    local function lookAtTarget()
-        local player = game.Players.LocalPlayer
-        local character = player.Character or player.CharacterAdded:Wait()
-        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-
-        if humanoidRootPart then
-            local closestTarget = nil
-            local closestDistance = currentRange
-
-            for _, otherPlayer in ipairs(game.Players:GetPlayers()) do
-                if otherPlayer ~= player and otherPlayer.Character and otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local targetRootPart = otherPlayer.Character.HumanoidRootPart
-                    local distance = (humanoidRootPart.Position - targetRootPart.Position).Magnitude
-
-                    if distance <= currentRange and distance < closestDistance then
-                        closestTarget = targetRootPart
-                        closestDistance = distance
-                    end
-                end
-            end
-
-            if closestTarget then
-                local direction = (closestTarget.Position - humanoidRootPart.Position).Unit
-                local lookAtCFrame = CFrame.new(humanoidRootPart.Position, humanoidRootPart.Position + Vector3.new(direction.X, 0, direction.Z))
-                humanoidRootPart.CFrame = lookAtCFrame
-            end
-        end
-    end
-
-    -- Toggle for enabling/disabling the bubble
-    Section:Toggle({
-        text = "Toggle Radius",
-        state = false,
-        callback = function(boolean)
-            bubbleEnabled = boolean
-            if bubbleEnabled then
-                createBubble()
-                playerLooking = true
-            else
-                removeBubble()
-                playerLooking = false
-            end
-        end
-    })
-
-    -- Continuously check if toggle is enabled and look at the target
-    RunService.RenderStepped:Connect(function()
-        if bubbleEnabled and playerLooking then
-            lookAtTarget()
-        end
-    end)
-
--- Existing code for the Auto Combo section
-local Section = Tab:Section({
-    text = "Auto Combo(its shit)"
-})
-
--- Add the button inside the "Auto Combo" section
-Section:Button({
-    text = "Saitama Combo",
-    callback = function()
-        local Player = game:GetService("Players").LocalPlayer
-        local Character = character
-        local Communicate = Character:WaitForChild("Communicate")
-
-        -- Function to fire a given action
-        local function fireAction(goal)
-            local args = {
-                [1] = {
-                    ["Goal"] = goal
-                }
-            }
-            Communicate:FireServer(unpack(args))
-        end
-
-        -- Function to equip and use a move from the player's inventory
-        local function equipAndUseMove(moveName)
-            -- Find the tool in the player's backpack
-            local tool = Player.Backpack:FindFirstChild(moveName)
-            if tool then
-                tool.Parent = Character
-                -- Assuming the tool is activated on Equip, you can add specific behavior if needed
-                tool:Activate()
-            else
-                warn("Tool not found:", moveName)
-            end
-            return tool
-        end
-
-        -- The combo sequence
-        local function comboScript()
-            -- Step 1: LeftClick -> LeftClickRelease
-            local args1 = {
-                [1] = {
-                    ["Goal"] = "LeftClick",
-                    ["Mobile"] = true
-                }
-            }
-            Communicate:FireServer(unpack(args1))
-            wait(0.5) -- wait for 0.5 seconds (click duration)
-            local args2 = {
-                [1] = {
-                    ["Goal"] = "LeftClickRelease"
-                }
-            }
-            Communicate:FireServer(unpack(args2))
-
-            -- Step 2: Equip and use "Consecutive Punches"
-            local consecutivePunches = equipAndUseMove("Consecutive Punches")
-            wait(1.5) -- wait for 1.5 seconds
-
-            -- Step 3: Equip and use "Shove" then click again
-            local shove = equipAndUseMove("Shove")
-            wait(0.5) -- wait for 0.5 seconds before clicking
-            local args3 = {
-                [1] = {
-                    ["Goal"] = "LeftClick",
-                    ["Mobile"] = true
-                }
-            }
-            Communicate:FireServer(unpack(args3))
-            wait(0.5) -- wait for 0.5 seconds before releasing click
-            local args4 = {
-                [1] = {
-                    ["Goal"] = "LeftClickRelease"
-                }
-            }
-            Communicate:FireServer(unpack(args4))
-
-            -- Step 4: Dash with W and Q keys
-            local args = {
-                [1] = {
-                    ["Dash"] = Enum.KeyCode.W,
-                    ["Key"] = Enum.KeyCode.Q,
-                    ["Goal"] = "KeyPress"
-                }
-            }
-            Communicate:FireServer(unpack(args))
-
-            -- Step 5: Wait for 0.4 seconds
-            wait(1.2)
-
-            -- Step 6: Equip and use "Normal Punch"
-            local normalPunch = equipAndUseMove("Normal Punch")
-
-            -- Wait for combo to finish
-            wait(1)
-
-            -- Unequip all tools after the combo
-            local characterTools = {}
-            for _, tool in pairs(Character:GetChildren()) do
-                if tool:IsA("Tool") then
-                    table.insert(characterTools, tool)
-                end
-            end
-
-            -- Unequip tools
-            for _, tool in pairs(characterTools) do
-                tool.Parent = Player.Backpack
-            end
-        end
-
-        -- Create the tool to trigger the combo
-        local comboTool = Instance.new("Tool")
-        comboTool.Name = "Combo"
-        comboTool.RequiresHandle = false
-        comboTool.Parent = Player.Backpack
-
-        -- Connect the tool's activation to the combo script
-        comboTool.Activated:Connect(function()
-            comboScript()
-        end)
-
-        -- Simulate the tool activation (to trigger the combo right away)
-        comboTool:Activate()
-    end
-})
-
--- Add a new button in the Auto Combo section
-Section:Button({
-    text = "Garou Combo",
-    callback = function()
-        local Player = game:GetService("Players").LocalPlayer
-        local Character = character
-        local Communicate = Character:WaitForChild("Communicate")
-
-        -- Function to fire a given action
-        local function fireAction(goal)
-            local args = {
-                [1] = {
-                    ["Goal"] = goal
-                }
-            }
-            Communicate:FireServer(unpack(args))
-        end
-
-        -- Function to equip and use a move from the player's inventory
-        local function equipAndUseMove(moveName)
-            -- Find the tool in the player's backpack
-            local tool = Player.Backpack:FindFirstChild(moveName)
-            if tool then
-                tool.Parent = Character
-                -- Assuming the tool is activated on Equip, you can add specific behavior if needed
-                tool:Activate()
-            else
-                warn("Tool not found:", moveName)
-            end
-        end
-
-        -- The combo sequence
-        local function comboScript()
-            -- Step 1: Click 3 times (LeftClick -> LeftClickRelease)
-            for i = 1, 3 do
-                local args1 = {
-                    [1] = {
-                        ["Goal"] = "LeftClick"
-                    }
-                }
-                Communicate:FireServer(unpack(args1))
-                wait(0.5) -- wait for 0.5 seconds (click duration)
-                local args2 = {
-                    [1] = {
-                        ["Goal"] = "LeftClickRelease"
-                    }
-                }
-                Communicate:FireServer(unpack(args2))
-            end
-
-            -- Step 2: Equip and use "Lethal Whirlwind Stream"
-            equipAndUseMove("Lethal Whirlwind Stream")
-            wait(2.45) -- wait for 2.45 seconds before activating Flowing Water
-
-            -- Step 3: Equip and use "Flowing Water"
-            equipAndUseMove("Flowing Water")
-            wait(2.5) -- wait for 2.5 seconds after Flowing Water
-
-            -- Step 4: Dash with W and Q keys and use "Hunter's Grasp"
-            local args = {
-                [1] = {
-                    ["Dash"] = Enum.KeyCode.W,
-                    ["Key"] = Enum.KeyCode.Q,
-                    ["Goal"] = "KeyPress"
-                }
-            }
-            Communicate:FireServer(unpack(args))
-            equipAndUseMove("Hunter's Grasp")
-        end
-
-        -- Create the tool to trigger the combo
-        local comboTool = Instance.new("Tool")
-        comboTool.Name = "Combo"
-        comboTool.RequiresHandle = false
-        comboTool.Parent = Player.Backpack
-
-        -- Connect the tool's activation to the combo script
-        comboTool.Activated:Connect(function()
-            comboScript()
-        end)
-    end
-})
-
-local Tab = TabSection:Tab({
-    text = "ESP",
-    icon = "rbxassetid://7999345313",
-})
-
-local Section = Tab:Section({
-    text = "Lighting changer"
-})
-
-local lighting = game:GetService("Lighting")
-local myTab = Section -- your tab initialization here (e.g., the GUI library you're using)
-
--- Default selected color (e.g., Pink)
-local selectedColor = Color3.fromRGB(255, 182, 193) 
-
--- Flag to control whether lighting change is enabled
-local lightingEnabled = false
-
--- Function to change lighting to a specific color
-local function changeLightingColor(color)
-    if not color then return end
-
-    lighting.Ambient = color
-    lighting.OutdoorAmbient = color
-
-    local sky = lighting:FindFirstChild("Sky")
-    if not sky then
-        sky = Instance.new("Sky")
-        sky.Name = "Sky"
-        sky.Parent = lighting
-    end
-
-    sky.SkyboxBk = color
-    sky.SkyboxDn = color
-    sky.SkyboxFt = color
-    sky.SkyboxLf = color
-    sky.SkyboxRt = color
-    sky.SkyboxUp = color
-
-    lighting.FogColor = color
-end
-
--- Color Picker to choose lighting color
-myTab:Colorpicker({
-    text = "Pick a Lighting Color",
-    color = selectedColor,
-    callback = function(color)
-        selectedColor = color
-        if lightingEnabled then
-            changeLightingColor(color)
-        end
-    end
-})
-
--- Toggle to enable or disable lighting color changes
-myTab:Toggle({
-    text = "Enable Lighting Change",
-    callback = function(state)
-        lightingEnabled = state
-        if lightingEnabled then
-            changeLightingColor(selectedColor)
-        else
-            changeLightingColor(Color3.fromRGB(255, 255, 255))
-        end
-    end
-})
-
-local Section = Tab:Section({
-    text = "General ESP"
-})
-
 -- Services
-local RunService = game:GetService("RunService");
-local PlayersService = game:GetService("Players");
-
--- Variables
-local Camera = workspace.CurrentCamera;
-local LastPos;
-local Lines = {};
-local Quads = {};
-local ESPEnabled = false; -- Toggle state
-local ESPConnection;
-
--- Functions
-local function HasCharacter(Player)
-    return Player.Character and Player.Character:FindFirstChild("HumanoidRootPart");
-end;
-
-local function DrawQuad(PosA, PosB, PosC, PosD)
-    local PosAScreen, PosAVisible = Camera:WorldToViewportPoint(PosA);
-    local PosBScreen, PosBVisible = Camera:WorldToViewportPoint(PosB);
-    local PosCScreen, PosCVisible = Camera:WorldToViewportPoint(PosC);
-    local PosDScreen, PosDVisible = Camera:WorldToViewportPoint(PosD);
-
-    if (not PosAVisible and not PosBVisible and not PosCVisible and not PosDVisible) then return; end;
-
-    local PosAVec = Vector2.new(PosAScreen.X, PosAScreen.Y);
-    local PosBVec = Vector2.new(PosBScreen.X, PosBScreen.Y);
-    local PosCVec = Vector2.new(PosCScreen.X, PosCScreen.Y);
-    local PosDVec = Vector2.new(PosDScreen.X, PosDScreen.Y);
-
-    local Quad = Drawing.new("Quad");
-        Quad.Thickness = .5;
-        Quad.Color = Color3.fromRGB(255, 255, 255);
-        Quad.Transparency = .25;
-        Quad.ZIndex = 1;
-        Quad.Filled = true;
-        Quad.Visible = true;
-
-    Quad.PointA = PosAVec;
-    Quad.PointB = PosBVec;
-    Quad.PointC = PosCVec;
-    Quad.PointD = PosDVec;
-
-    table.insert(Quads, Quad);
-end;
-
-local function DrawLine(From, To)
-    local FromScreen, FromVisible = Camera:WorldToViewportPoint(From);
-    local ToScreen, ToVisible = Camera:WorldToViewportPoint(To);
-
-    if (not FromVisible and not ToVisible) then return; end;
-
-    local FromPos = Vector2.new(FromScreen.X, FromScreen.Y);
-    local ToPos = Vector2.new(ToScreen.X, ToScreen.Y);
-
-    local Line = Drawing.new("Line");
-        Line.Thickness = 1;
-        Line.From = FromPos;
-        Line.To = ToPos;
-        Line.Color = Color3.fromRGB(255, 255, 255);
-        Line.Transparency = 1;
-        Line.ZIndex = 1;
-        Line.Visible = true;
-
-    table.insert(Lines, Line);
-end;
-
-local function GetCorners(Part)
-    local CF, Size, Corners = Part.CFrame, Part.Size / 2, {};
-    for X = -1, 1, 2 do for Y = -1, 1, 2 do for Z = -1, 1, 2 do
-        Corners[#Corners+1] = (CF * CFrame.new(Size * Vector3.new(X, Y, Z))).Position;
-    end; end; end;
-    return Corners;
-end;
-
-local function DrawEsp(Player)
-    local HRP = Player.Character.HumanoidRootPart;
-
-    -- Constructing the 3d box.
-    local CubeVertices = GetCorners({CFrame = HRP.CFrame * CFrame.new(0, -0.5, 0), Size = Vector3.new(3, 5, 3)});
-
-    -- Drawing the 3d box.
-    DrawLine(CubeVertices[1], CubeVertices[2]);
-    DrawLine(CubeVertices[2], CubeVertices[6]);
-    DrawLine(CubeVertices[6], CubeVertices[5]);
-    DrawLine(CubeVertices[5], CubeVertices[1]);
-
-    DrawQuad(CubeVertices[1], CubeVertices[2], CubeVertices[6], CubeVertices[5]);
-
-    DrawLine(CubeVertices[1], CubeVertices[3]);
-    DrawLine(CubeVertices[2], CubeVertices[4]);
-    DrawLine(CubeVertices[6], CubeVertices[8]);
-    DrawLine(CubeVertices[5], CubeVertices[7]);
-
-    DrawQuad(CubeVertices[2], CubeVertices[4], CubeVertices[8], CubeVertices[6]);
-    DrawQuad(CubeVertices[1], CubeVertices[2], CubeVertices[4], CubeVertices[3]);
-    DrawQuad(CubeVertices[1], CubeVertices[5], CubeVertices[7], CubeVertices[3]);
-    DrawQuad(CubeVertices[5], CubeVertices[7], CubeVertices[8], CubeVertices[6]);
-
-    DrawLine(CubeVertices[3], CubeVertices[4]);
-    DrawLine(CubeVertices[4], CubeVertices[8]);
-    DrawLine(CubeVertices[8], CubeVertices[7]);
-    DrawLine(CubeVertices[7], CubeVertices[3]);
-
-    DrawQuad(CubeVertices[3], CubeVertices[4], CubeVertices[8], CubeVertices[7]);
-end;
-
-local function BoxEsp()
-    local Players = PlayersService:GetPlayers();
-
-    for i = 1, #Lines do
-        local Line = rawget(Lines, i);
-        if (Line) then Line:Remove(); end;
-    end;
-
-    Lines = {};
-
-    for i = 1, #Quads do
-        local Quad = rawget(Quads, i);
-        if (Quad) then Quad:Remove(); end;
-    end;
-
-    Quads = {};
-
-    for i = 1, #Players do
-        local Player = rawget(Players, i);
-        if HasCharacter(Player) then
-            DrawEsp(Player);
-        end;
-    end;
-end;
-
--- Toggle
-Section:Toggle({
-    text = "Box ESP Toggle",
-    state = ESPEnabled,
-    callback = function(state)
-        ESPEnabled = state;
-
-        if ESPEnabled then
-            ESPConnection = RunService.RenderStepped:Connect(BoxEsp);
-        elseif ESPConnection then
-            ESPConnection:Disconnect();
-            ESPConnection = nil;
-
-            -- Clear existing ESP visuals
-            for _, Line in ipairs(Lines) do
-                Line:Remove();
-            end;
-            Lines = {};
-
-            for _, Quad in ipairs(Quads) do
-                Quad:Remove();
-            end;
-            Quads = {};
-        end;
-    end;
-});
-
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local toggleEnabled = false  -- Default state, beams are off
-local beams = {}  -- Table to store the beams
-
--- Function to create a beam from the player's CFrame to another player's CFrame
-local function createBeam(targetPlayer)
-    local beam = Instance.new("Beam")
-    beam.Parent = game.Workspace
-    beam.Color = ColorSequence.new(Color3.fromRGB(0, 255, 0))  -- Green color for the beam
-    beam.Width0 = 0.2
-    beam.Width1 = 0.2
-    beam.Texture = ""  -- Optional: Add a texture to the beam if desired
-
-    local attachment0 = Instance.new("Attachment")
-    attachment0.Parent = LocalPlayer.Character.HumanoidRootPart
-    attachment0.Position = Vector3.new(0, 5, 0)  -- Adjust position if needed
-
-    local attachment1 = Instance.new("Attachment")
-    attachment1.Parent = targetPlayer.Character.HumanoidRootPart
-    attachment1.Position = Vector3.new(0, 5, 0)  -- Adjust position if needed
-
-    beam.Attachment0 = attachment0
-    beam.Attachment1 = attachment1
-    return beam
-end
-
--- Function to toggle the visibility of the beams
-local function toggleBeams(state)
-    toggleEnabled = state
-
-    -- If toggle is enabled, create beams for each player
-    if toggleEnabled then
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                -- Create a beam to the other player
-                local beam = createBeam(player)
-                table.insert(beams, beam)  -- Store the beam in the table
-            end
-        end
-    else
-        -- If toggle is disabled, remove all beams
-        for _, beam in pairs(beams) do
-            beam:Destroy()
-        end
-        beams = {}  -- Clear the beams table
-    end
-end
-
--- Toggle Button
-Section:Toggle({
-    text = "Enable/Disable Beams",
-    state = toggleEnabled,  -- Set the initial state to match the toggle
-    callback = function(boolean)
-        toggleBeams(boolean)  -- Toggle the beams based on the state
-    end
-})
-
-local ESPEnabled = false
-local ESPBoxes = {}
-
-function toggleESP(state)
-    ESPEnabled = state
-    if not ESPEnabled then
-        for _, elements in pairs(ESPBoxes) do
-            elements.box.Visible = false
-            elements.healthBar.Visible = false
-        end
-    end
-end
-
-
-Section:Toggle({
-    text = "CS:GO ESP weird",
-    state = ESPEnabled,
-    callback = function(state)
-        toggleESP(state)
-    end
-})
-
-local function createESP(player)
-    if player == game.Players.LocalPlayer then return end
-
-    local box = Drawing.new("Square")
-    box.Color = Color3.fromRGB(255, 0, 0)
-    box.Thickness = 2
-    box.Filled = false
-    box.Visible = false
-
-    local healthBar = Drawing.new("Square")
-    healthBar.Color = Color3.fromRGB(0, 255, 0)
-    healthBar.Thickness = 2
-    healthBar.Filled = true
-    healthBar.Visible = false
-
-    ESPBoxes[player] = { box = box, healthBar = healthBar }
-end
-
-local function updateESP()
-    while true do
-        if ESPEnabled then
-            for _, player in pairs(game.Players:GetPlayers()) do
-                if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
-                    local humanoid = player.Character:FindFirstChild("Humanoid")
-                    local head = player.Character:FindFirstChild("Head")
-
-                    if rootPart and humanoid and head then
-                        local cam = workspace.CurrentCamera
-                        local headPos = head.Position + Vector3.new(0, 0.5, 0)
-                        local footPos = rootPart.Position - Vector3.new(0, 3, 0)
-
-                        local headScreenPos, onScreenHead = cam:WorldToViewportPoint(headPos)
-                        local footScreenPos, onScreenFoot = cam:WorldToViewportPoint(footPos)
-
-                        if onScreenHead and onScreenFoot then
-                            if not ESPBoxes[player] then
-                                createESP(player)
-                            end
-
-                            local box = ESPBoxes[player].box
-                            local healthBar = ESPBoxes[player].healthBar
-
-                            -- Calculate size dynamically based on distance
-                            local boxHeight = math.abs(headScreenPos.Y - footScreenPos.Y)
-                            local boxWidth = boxHeight * 0.6
-                            local boxX = headScreenPos.X - (boxWidth / 2)
-                            local boxY = headScreenPos.Y
-
-                            -- Update red box position
-                            box.Position = Vector2.new(boxX, boxY)
-                            box.Size = Vector2.new(boxWidth, boxHeight)
-                            box.Visible = true
-
-                            -- Health bar position
-                            local maxHealth = humanoid.MaxHealth
-                            local health = humanoid.Health
-                            local healthPercentage = math.clamp(health / maxHealth, 0, 1)
-                            local healthHeight = boxHeight * healthPercentage
-
-                            healthBar.Position = Vector2.new(boxX + boxWidth + 5, boxY + (boxHeight - healthHeight))
-                            healthBar.Size = Vector2.new(5, healthHeight) -- Slim health bar
-                            healthBar.Visible = true
-                        else
-                            if ESPBoxes[player] then
-                                ESPBoxes[player].box.Visible = false
-                                ESPBoxes[player].healthBar.Visible = false
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        task.wait(0.01) -- Faster updates (10ms)
-    end
-end
-
-game.Players.PlayerRemoving:Connect(function(player)
-    if ESPBoxes[player] then
-        ESPBoxes[player].box:Remove()
-        ESPBoxes[player].healthBar:Remove()
-        ESPBoxes[player] = nil
-    end
-end)
-
-spawn(updateESP)
-
-
-local Section = Tab:Section({
-    text = "Death Counter"
-})
-
-Section:Toggle({
-    text = "Death Counter",
-    state = false, -- Default boolean
-    callback = function(boolean)
-        -- Roblox Lua Script: Check players' inventory for 'Death Counter' and apply effects
-local Players = game:GetService("Players")
-
--- Function to make a player glow
-local function makeGlow(character, color, duration)
-    if not character then return end
-
-    -- Remove existing highlights
-    local existingHighlight = character:FindFirstChild("Highlight")
-    if existingHighlight then
-        existingHighlight:Destroy()
-    end
-
-    -- Create a new highlight effect
-    local highlight = Instance.new("Highlight")
-    highlight.Parent = character
-    highlight.FillColor = color
-    highlight.FillTransparency = 0.5
-
-    -- Remove the highlight after the duration
-    if duration > 0 then
-        task.delay(duration, function()
-            if highlight.Parent then
-                highlight:Destroy()
-            end
-        end)
-    end
-end
-
--- Track state of Death Counter for players
-local playerStates = {}
-
--- Function to check a player's inventory
-local function checkInventory(player)
-    local backpack = player:FindFirstChild("Backpack")
-    local Character = haracter
-
-    if backpack then
-        local deathCounter = backpack:FindFirstChild("Death Counter")
-
-        if deathCounter then
-            -- If Death Counter is found and not already detected, set state and glow red
-            if not playerStates[player] or not playerStates[player].hasDeathCounter then
-                playerStates[player] = { hasDeathCounter = true }
-                -- Remove the item from the inventory
-                deathCounter:Destroy()
-                -- Make the player glow red indefinitely
-                makeGlow(Character, Color3.new(1, 0, 0), 0)
-            end
-        else
-            -- If Death Counter was detected but is now gone, glow yellow
-            if playerStates[player] and playerStates[player].hasDeathCounter then
-                playerStates[player].hasDeathCounter = false
-                -- Make the player glow yellow for 10 seconds
-                makeGlow(Character, Color3.new(1, 1, 0), 10)
-            end
-        end
-    end
-end
-
--- Monitor inventory changes for a player
-local function monitorInventory(player)
-    local backpack = player:FindFirstChild("Backpack")
-
-    if backpack then
-        backpack.ChildAdded:Connect(function()
-            checkInventory(player)
-        end)
-        backpack.ChildRemoved:Connect(function()
-            checkInventory(player)
-        end)
-    end
-end
-
--- Connect to player joining
-Players.PlayerAdded:Connect(function(player)
-    -- Monitor inventory changes when the player spawns
-    player.CharacterAdded:Connect(function()
-        monitorInventory(player)
-        checkInventory(player)
-    end)
-
-    -- Initial monitoring when the script runs
-    monitorInventory(player)
-    checkInventory(player)
-end)
-
--- Initial setup for all players already in the game
-for _, player in ipairs(Players:GetPlayers()) do
-    monitorInventory(player)
-    checkInventory(player)
-end
-
-    end
-})
-
-local Tab = TabSection:Tab({
-    text = "Game abuse?",
-    icon = "rbxassetid://7999345313",
-})
-
-local Section = Tab:Section({
-    text = "Fling"
-})
-
-Section:Button({
-    text = "Fling all",
-    callback = function()
-        loadstring(game:HttpGet("https://pastebin.com/raw/zqyDSUWX"))()
-    end,
-})
-
-local Section = Tab:Section({
-    text = "M1 reset(op and keybind c)"
-})
-
-Section:Button({
-    text = "M1 reset(execute again after you die)",
-    callback = function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlosegui/refs/heads/main/m1reset.lua"))()
-    end,
-})
-
-local Section = Tab:Section({
-    text = "Trashcan aimbot"
-})
-
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait() -- Corrected here
-local HRP = Character:WaitForChild("HumanoidRootPart")
-local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
-
-local selectedMode = "closest to player"
-local trackConnection
-
-
--- Dropdown
-Section:Dropdown({
-    text = "Targeting Mode",
-    default = "closest to player",
-    list = {"closest to player", "closest to mouse"},
-    callback = function(selected)
-        selectedMode = selected
-    end
-})
-
--- Helper: Get closest player to character
-local function getClosestToPlayer()
-    local closest, dist = nil, math.huge
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local d = (plr.Character.HumanoidRootPart.Position - HRP.Position).Magnitude
-            if d < dist then
-                dist = d
-                closest = plr
-            end
-        end
-    end
-    return closest
-end
-
--- Helper: Get closest player to mouse
-local function getClosestToMouse()
-    local closest, dist = nil, math.huge
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local screenPos, onScreen = Camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
-            if onScreen then
-                local d = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
-                if d < dist then
-                    dist = d
-                    closest = plr
-                end
-            end
-        end
-    end
-    return closest
-end
-
--- Toggle
-Section:Toggle({
-    text = "Enable TP on Animation",
-    callback = function(state)
-        if trackConnection then
-            trackConnection:Disconnect()
-            trackConnection = nil
-        end
-
-        if state then
-            trackConnection = Character.Humanoid.AnimationPlayed:Connect(function(track)
-                if track.Animation.AnimationId == "rbxassetid://13813955149" then
-                    local target
-                    if selectedMode == "closest to player" then
-                        target = getClosestToPlayer()
-                    else
-                        target = getClosestToMouse()
-                    end
-
-                    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                        local lastCF = HRP.CFrame
-
-                        -- Hide movement
-                        Camera.CameraType = Enum.CameraType.Scriptable
-
-                        -- Optional: Wait before teleportation (adjust the delay as needed)
-
-                        -- Teleport to the target's position (around the target)
-                        local targetHRP = target.Character.HumanoidRootPart
-                        local origin = targetHRP.Position
-                        local radius = 5
-                        local angle = math.rad(math.random(0, 360))
-                        local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
-                        local destination = origin + offset
-
-                        -- Teleport to the calculated destination and look at the target
-                        HRP.CFrame = CFrame.lookAt(destination, origin)
-                        HRP.AssemblyLinearVelocity = Vector3.zero
-                        HRP.AssemblyAngularVelocity = Vector3.zero
-
-                        -- Keep looking at the target
-                        local connection = game:GetService("RunService").Heartbeat:Connect(function()
-                            HRP.CFrame = CFrame.lookAt(HRP.Position, targetHRP.Position)
-                        end)
-
-                        -- Wait for animation to stop
-                        track.Stopped:Wait()
-
-                        -- Add delay before teleporting back (adjust delay here)
-                        task.wait(0.5)  -- Add 0.5 second delay before returning
-
-                        -- Teleport back to the original position
-                        HRP.CFrame = lastCF
-                        HRP.AssemblyLinearVelocity = Vector3.zero
-                        HRP.AssemblyAngularVelocity = Vector3.zero
-
-                        -- Restore camera
-                        Camera.CameraType = Enum.CameraType.Custom
-                        Camera.CameraSubject = Character.Humanoid
-
-                        -- Disconnect the look-at connection
-                        connection:Disconnect()
-                    end
-                end
-            end)
-        end
-    end
-})
-
-
-local Tab = TabSection:Tab({
-    text = "General HVH things",
-    icon = "rbxassetid://7999345313",
-})
-
-local Section = Tab:Section({
-    text = "Anti DC"
-})
-
-Section:Toggle({
-    text = "Anti Death Counter",
-    callback = function(state)
-        local Players = game:GetService("Players")
-        local player = Players.LocalPlayer
-
-        if state then
-            -- Delete death cutscene if it exists
-            local cutscenesFolder = workspace:FindFirstChild("Cutscenes")
-            if cutscenesFolder then
-                local deathCutscene = cutscenesFolder:FindFirstChild("Death Cutscene")
-                if deathCutscene then
-                    deathCutscene:Destroy()
-                end
-            end
-
-            game:GetService("StarterGui"):SetCore("SendNotification", {
-                Title = "I aint making this",
-                Text = "Use Anti Void or this wont work",
-                Duration = 5
-            })
-
-            -- Function to handle character setup
-            local function setupPlayer(character)
-                local humanoid = character:WaitForChild("Humanoid")
-                local hrp = character:WaitForChild("HumanoidRootPart")
-                local camera = workspace.CurrentCamera
-
-                local targetAnimId = "rbxassetid://11343250001"
-                local targetAssetId = targetAnimId:match("%d+")
-
-                humanoid.AnimationPlayed:Connect(function(track)
-                    local id = track.Animation.AnimationId:match("%d+")
-                    if id == targetAssetId then
-                        local originalCFrame = hrp.CFrame
-                        hrp.CFrame = CFrame.new(0, -497, 0)
-                        task.wait(3)
-                        hrp.CFrame = originalCFrame
-                        camera.CameraSubject = humanoid
-                        camera.CameraType = Enum.CameraType.Custom
-                    end
-                end)
-            end
-
-            -- Initial setup
-            local character = player.Character or player.CharacterAdded:Wait()
-            setupPlayer(character)
-
-            -- Re-setup after respawn
-            player.CharacterAdded:Connect(setupPlayer)
-
-        else
-            -- Optional: disconnect events or reset state
-        end
-    end
-})
-
-local Section = Tab:Section({
-    text = "Anti Fling"
-})
-
--- init
-if not game.IsLoaded(game) then
-    repeat task.wait() until game.IsLoaded(game)
-end
-
--- variables
-local RunService = game:GetService("RunService")
-local Client = game:GetService("Players").LocalPlayer
-local AntiFlingEnabled = false 
-
--- Cache of parts to avoid reprocessing
-local processedParts = {}
-
--- AntiFling function
-function AntiFling(part)
-    if part and not processedParts[part] then
-        processedParts[part] = true
-        part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-        part.Velocity = Vector3.new(0, 0, 0)
-        part.RotVelocity = Vector3.new(0, 0, 0)
-        part.CanCollide = false
-    end
-end
-
--- Connect to heartbeat for AntiFling on existing parts
-for _, part in next, game:GetDescendants() do
-    if part and part:IsA("Part") and part.Parent ~= Client.Character and part.Name == "HumanoidRootPart" then
-        AntiFling(part)
-    end
-end
-
--- Handle new parts being added
-workspace.DescendantAdded:Connect(function(part)
-    if AntiFlingEnabled and part:IsA("Part") and part.Name == "HumanoidRootPart" and part.Parent ~= game.Players.LocalPlayer.Character then
-        task.wait(2) -- Delay to make sure part is fully added
-        AntiFling(part)
-    end
-end)
-
--- Handle toggling AntiFling
-Section:Toggle({
-    text = "Enable AntiFling (may lag)",
-    callback = function(state)
-        AntiFlingEnabled = state
-        if not AntiFlingEnabled then
-            -- Reset any modifications when disabled
-            for part, _ in pairs(processedParts) do
-                if part and part:IsA("Part") then
-                    part.CustomPhysicalProperties = nil
-                    part.Velocity = Vector3.new(0, 0, 0)
-                    part.RotVelocity = Vector3.new(0, 0, 0)
-                    part.CanCollide = true
-                end
-            end
-            processedParts = {}
-        end
-    end
-})
-
- 
- local Section = Tab:Section({
-    text = "Anti Void"
-})
-
-local isEnabled = false
-local platformMade = false
-
-Section:Toggle({ 
-    text = "Anti Void",
-    callback = function(state)
-        isEnabled = state
-    end
-})
-
-game:GetService("RunService").Heartbeat:Connect(function()
-    if isEnabled and not platformMade then
-        local platform = Instance.new("Part")
-        platform.Anchored = true
-        platform.Size = Vector3.new(1000, 10, 1000) -- super huge
-        platform.Position = Vector3.new(0, -500, 0)
-        platform.Name = "AntiVoidPlatform"
-        platform.Material = Enum.Material.ForceField
-        platform.Color = Color3.fromRGB(255, 255, 255)
-        platform.Transparency = 0.3
-        platform.CanCollide = true
-        platform.Parent = workspace
-
-        platformMade = true
-    elseif not isEnabled and platformMade then
-        local existing = workspace:FindFirstChild("AntiVoidPlatform")
-        if existing then
-            existing:Destroy()
-        end
-        platformMade = false
-    end
-end)
-
-local Tab = TabSection:Tab({
-    text = "Blatant",
-    icon = "rbxassetid://7999345313",
-})
-
-local Section = Tab:Section({
-    text = "No Stun"
-})
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local player = Players.LocalPlayer
-local character = LocalPlayer.Character or player.CharacterAdded:Wait()
-
-local isEnabled = false
-
--- Function to check and remove NoRotate
-local function checkForNoRotate()
-    if character then
-        for _, item in ipairs(character:GetChildren()) do
-            if item.Name == "NoRotate" then
-                item:Destroy()
-                break
-            end
-        end
-    end
-end
-
--- Function to check for ragdoll, freeze, and slowed effects
-local function checkRagdoll()
-    local Character = character
-    if Character then
-        if Character:FindFirstChild("Ragdoll") or Character:FindFirstChild("Freeze") or Character:FindFirstChild("Slowed") then
-            -- Effects found, but no print statement
-        end
-    end
-end
-
--- Function to disable ragdoll, freeze, and slowed effects
-local function disableRagdoll()
-    local Character = character
-    if Character then
-        local ragdoll = Character:FindFirstChild("Ragdoll")
-        if ragdoll then
-            ragdoll:Destroy()
-        end
-
-        local freeze = Character:FindFirstChild("Freeze")
-        if freeze then
-            freeze:Destroy()
-            local humanoid = Character:FindFirstChild("Humanoid")
-            if humanoid and humanoid.WalkSpeed < 35 then
-                humanoid.WalkSpeed = 35
-            end
-            local humanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
-            if humanoidRootPart then
-                humanoidRootPart.Velocity = Vector3.new(humanoidRootPart.Velocity.X, 0, humanoidRootPart.Velocity.Z)
-            end
-        end
-
-        local slowed = Character:FindFirstChild("Slowed")
-        if slowed then
-            slowed:Destroy()
-        end
-    end
-end
-
--- Main loop
-RunService.RenderStepped:Connect(function()
-    if isEnabled then
-        disableRagdoll()
-        checkForNoRotate()
-    end
-end)
-
-character:WaitForChild("Humanoid")
-checkForNoRotate()
-
--- Toggle
-Section:Toggle({
-    text = "Disable Stun",
-    state = false,
-    callback = function(bool)
-        isEnabled = bool
-    end
-})
-
-
--- Run the functions if the toggle is enabled
-game:GetService("RunService").RenderStepped:Connect(function()
-    if isEnabled then
-        checkRagdoll()
-        disableRagdoll()
-    end
-end)
-
-
-local Section = Tab:Section({
-    text = "booty clap"
-})
-
-local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = workspace
+local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
-local AnimationId = "rbxassetid://120789866363939"
-local selectedPlayerName = nil
-local following = false
 
--- Create an animation instance
-local animation = Instance.new("Animation")
-animation.AnimationId = AnimationId
-local animator = Character:WaitForChild("Humanoid"):WaitForChild("Animator")
-local animationTrack = animator:LoadAnimation(animation)
-
--- Function to stop movement and animation
-local function stopFollowing()
-    following = false
-    animationTrack:Stop()
-end
-
--- Function to follow the selected player
-local function followPlayer(targetPlayer)
-    if not targetPlayer or not targetPlayer.Character then return end
-    local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not targetRoot then return end
-
-    -- Play the animation
-    animationTrack:Play()
-    following = true
-
-    -- Follow loop
-    while following and selectedPlayerName == targetPlayer.Name do
-        -- Position closer behind the player
-        local behindPosition = targetRoot.CFrame * CFrame.new(0, 0, 3) -- Closer distance
-        local tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { -- Faster speed
-            CFrame = behindPosition
-        })
-        tween:Play()
-        tween.Completed:Wait()
-
-        -- Move forward and back smoothly
-        local forwardPosition = targetRoot.CFrame * CFrame.new(0, 0, 2) -- Closer forward movement
-        local backPosition = targetRoot.CFrame * CFrame.new(0, 0, 4) -- Closer backward movement
-
-        -- Forward movement
-        tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), { -- Faster
-            CFrame = forwardPosition
-        })
-        tween:Play()
-        tween.Completed:Wait()
-
-        -- Backward movement
-        tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), { -- Faster
-            CFrame = backPosition
-        })
-        tween:Play()
-        tween.Completed:Wait()
-
-        wait(0.05) -- Shorter delay for smoother following
-    end
-
-    -- Stop the animation when done
-    animationTrack:Stop()
-end
-
--- Create the dropdown with player options and "None"
-local playerNames = {"None"} -- Start with "None" option
-for _, player in ipairs(Players:GetPlayers()) do
-    table.insert(playerNames, player.Name)
-end
-
-Section:Dropdown({
-    text = "Select Player",
-    list = playerNames,
-    default = "None",
-    callback = function(selectedPlayer)
-        selectedPlayerName = selectedPlayer
-        if selectedPlayer == "None" then
-            stopFollowing()
-        else
-            local targetPlayer = Players:FindFirstChild(selectedPlayer)
-            stopFollowing() -- Stop any current movement before starting a new one
-            followPlayer(targetPlayer)
-        end
-    end
-})
-
--- Placeholder for your loop coroutine
-getgenv().loop = nil
-
--- Animation configuration
-local animations = {
-    ["rbxassetid://12273188754"] = 1.31,
-    ["rbxassetid://12296113986"] = 1.2,
+-- Global State
+local features = {
+    autoBlock = { enabled = false, range = 10, bubble = nil, looking = false },
+    aimbot = { mode = "closest to player", trackConnection = nil },
+    esp = { enabled = false, boxEnabled = false, boxColor = Color3.new(1,0,0), healthEnabled = false, tracersEnabled = false, skeletonEnabled = false, chamsEnabled = false },
+    lighting = { enabled = false, color = Color3.fromRGB(255, 182, 193) },
+    noStun = false,
+    antiFling = { enabled = false },
+    antiVoid = { enabled = false, platform = nil },
+    stopAnims = false,
+    bootyClap = { following = false, target = nil, loop = nil },
+    antiDeath = { enabled = false, originalPos = nil },
+    infJump = false
 }
 
--- Utility function
-function ifind(t, a)
-    for i, v in pairs(t) do
-        if i == a then
-            return i
-        end
-    end
-    return false
-end
+-- Library Initialization
+local Library, Notifications = loadstring(game:HttpGet("https://raw.githubusercontent.com/l1l1l1l1l11l1l1l1l11/Neverlose-Main/refs/heads/main/nssso.luau"))()
 
-local Section = Tab:Section({
-    text = "insta kill garou normal"
+-- Window
+local Window = Library:window({
+    name = "femboys.pub",
+    size = UDim2.new(0, 650, 0, 450)
 })
 
--- The toggle from your GUI
-Section:Toggle({
-    text = "insta kill normal",
-    state = false, -- Default state
-    callback = function(boolean)
-        print("Toggle current: ", boolean)
-        
-        if boolean then
-            -- Start the loop
-            getgenv().loop = coroutine.create(function()
-                local plr = game.Players.LocalPlayer
-                local dothetech = false
-                local lastcf
+-- ====================
+-- TAB: DEFINITIONS
+-- ====================
+local LegitTab = Window:Tab({ name = "Legit" })
+local BlatantTab = Window:Tab({ name = "Blatant" })
+local VisualsTab = Window:Tab({ name = "Visuals" })
+local MiscTab = Window:Tab({ name = "Misc" })
 
+-- ====================
+-- TAB: LEGIT
+-- ====================
+local LegitMain = LegitTab:Section({ name = "Main", side = "left" })
+local LegitExtra = LegitTab:Section({ name = "Extra", side = "right" })
+
+-- Soft Aim Lock
+RunService.BindToRenderStep(RunService, "SoftAim", Enum.RenderPriority.Camera.Value + 1, function()
+    if not features.autoBlock.enabled then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local closestTarget = nil; local closestDist = features.autoBlock.range
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= LocalPlayer and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+            local tHrp = other.Character.HumanoidRootPart
+            local dist = (hrp.Position - tHrp.Position).Magnitude
+            if dist <= features.autoBlock.range and dist < closestDist then closestDist = dist; closestTarget = tHrp end
+        end
+    end
+    if closestTarget then
+        local dir = (closestTarget.Position - hrp.Position).Unit
+        local lookCf = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
+        hrp.CFrame = lookCf
+    end
+end)
+LegitMain:Toggle({ name = "Soft Aim Lock", callback = function(bool) features.autoBlock.enabled = bool end })
+LegitMain:Slider({ name = "Range", min = 10, max = 100, default = 10, suffix = " studs", callback = function(val) features.autoBlock.range = val end })
+LegitExtra:Button({ name = "M1 reset script(keybind c)", callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlosegui/refs/heads/main/m1reset.lua"))() end })
+
+-- ====================
+-- TAB: VISUALS
+-- ====================
+local EspSection = VisualsTab:Section({ name = "ESP Configuration", side = "left" })
+local WorldSection = VisualsTab:Section({ name = "World Settings", side = "right" })
+
+-- Variables
+local espConfig = {
+    boxStyle = "Corner", 
+    healthStyle = "Bar",
+    tracerOrigin = "Bottom",
+    tsbClass = true,
+    deathCounter = true,
+    fillTransparency = 0.5
+}
+
+-- TSB Detection
+local function getTSBClass(player)
+    if not player then return "None" end
+    local backpack = player.Backpack; local char = player.Character
+    local function has(name) return (backpack and backpack:FindFirstChild(name)) or (char and char:FindFirstChild(name)) end
+    if has("Normal Punch") then return "Saitama" end
+    if has("Table Flip") or has("Death Counter") then return "Saitama Ult" end 
+    if has("Flowing Water") then return "Garou" end
+    if has("The Final Hunt") then return "Garou Ult" end
+    if has("Incinerate") then return "Genos" end
+    if has("Jet Dive") then return "Genos Ult" end
+    if has("Whirlwind") then return "Tatsumaki" end
+    return "Unknown"
+end
+
+-- ESP Drawing
+local espCache = {}
+local dcCache = {} 
+
+local function createDrawing(type, props)
+    local d = Drawing.new(type)
+    for k,v in pairs(props) do d[k]=v end
+    return d
+end
+
+local function removeEsp(p)
+    if espCache[p] then 
+        for k, d in pairs(espCache[p]) do 
+            if type(d) == "table" then for _, l in pairs(d) do l:Remove() end else d:Remove() end
+        end 
+        espCache[p] = nil 
+    end
+    -- Remove Chams
+    if p.Character then
+        local hl = p.Character:FindFirstChild("TSB_Highlight")
+        if hl then hl:Destroy() end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    local cam = Workspace.CurrentCamera
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character:FindFirstChild("Head") then
+             if not features.esp.enabled then removeEsp(p) continue end
+             local char = p.Character; local hrp = char.HumanoidRootPart; local head = char.Head; local hum = char.Humanoid
+             local vec, onScreen = cam:WorldToViewportPoint(hrp.Position)
+             
+             -- Chams Logic
+             local hl = char:FindFirstChild("TSB_Highlight")
+             if features.esp.chamsEnabled then
+                 if not hl then
+                     hl = Instance.new("Highlight", char)
+                     hl.Name = "TSB_Highlight"
+                     hl.FillTransparency = 0.5
+                     hl.OutlineTransparency = 0
+                 end
+                 hl.FillColor = features.esp.boxColor
+                 hl.OutlineColor = Color3.new(1,1,1)
+                 hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+             else
+                 if hl then hl:Destroy() end
+             end
+
+             if onScreen and hum.Health > 0 then
+                  if not espCache[p] then
+                      espCache[p] = {
+                          box = createDrawing("Square", {Thickness=1, Color=Color3.new(1,0,0), Filled=false, Transparency=1}),
+                          filledBox = createDrawing("Square", {Thickness=0, Filled=true, Transparency=0.5}),
+                          corners = {}, -- Table for corner lines
+                          name = createDrawing("Text", {Size=16, Center=true, Outline=true, Color=Color3.new(1,1,1)}),
+                          dist = createDrawing("Text", {Size=14, Center=true, Outline=true, Color=Color3.new(1,1,1)}),
+                          hpText = createDrawing("Text", {Size=14, Center=true, Outline=true, Color=Color3.new(0,1,0)}),
+                          healthBar = createDrawing("Square", {Filled=true, Thickness=1, Transparency=1}),
+                          healthOutline = createDrawing("Square", {Filled=false, Thickness=1, Color=Color3.new(0,0,0), Transparency=1}),
+                          tracer = createDrawing("Line", {Thickness=1, Color=Color3.new(1,1,1), Transparency=1}),
+                          classText = createDrawing("Text", {Size=14, Center=true, Outline=true, Color=Color3.fromRGB(255, 215, 0)}),
+                          headDot = createDrawing("Circle", {Radius=3, Filled=true, Color=Color3.new(1,1,1), Visible=false}),
+                          skeleton = {}
+                      }
+                      -- Init Corners (8 lines)
+                      for i=1,8 do table.insert(espCache[p].corners, createDrawing("Line", {Thickness=3, Color=Color3.new(1,0,0), Transparency=1})) end -- Thicker
+                      -- Init Skeleton (10 lines)
+                      for i=1,12 do table.insert(espCache[p].skeleton, createDrawing("Line", {Thickness=1, Color=Color3.new(1,1,1), Transparency=1})) end -- More lines just in case
+                  end
+                  local cache = espCache[p]
+                  local headPos = cam:WorldToViewportPoint(head.Position + Vector3.new(0,0.5,0))
+                  local legPos = cam:WorldToViewportPoint(hrp.Position - Vector3.new(0,3,0))
+                  local height = legPos.Y - headPos.Y
+                  local width = height / 2
+                  
+                  local mainColor = Color3.new(1,1,1)
+                  if espConfig.deathCounter then
+                      local hasDC = (p.Backpack and p.Backpack:FindFirstChild("Death Counter")) or (char and char:FindFirstChild("Death Counter"))
+                      if hasDC then mainColor = Color3.fromRGB(255, 0, 0); dcCache[p]=0 elseif dcCache[p] and dcCache[p]>tick() then mainColor = Color3.fromRGB(255, 255, 0) else if dcCache[p]==0 then dcCache[p]=tick()+10 end end
+                  end
+                  
+                  -- Box Styles
+                  cache.box.Visible = false; cache.filledBox.Visible = false; for _,l in pairs(cache.corners) do l.Visible = false end
+                  if features.esp.boxEnabled then
+                      if espConfig.boxStyle == "Corner" then
+                           local tl, tr, bl, br = Vector2.new(vec.X - width/2, vec.Y - height/2), Vector2.new(vec.X + width/2, vec.Y - height/2), Vector2.new(vec.X - width/2, vec.Y + height/2), Vector2.new(vec.X + width/2, vec.Y + height/2)
+                           local len = width / 2 -- Longer lines
+                           local c = cache.corners
+                           c[1].Visible=true; c[1].From=tl; c[1].To=tl+Vector2.new(len,0); c[1].Color=features.esp.boxColor
+                           c[2].Visible=true; c[2].From=tl; c[2].To=tl+Vector2.new(0,len); c[2].Color=features.esp.boxColor
+                           c[3].Visible=true; c[3].From=tr; c[3].To=tr-Vector2.new(len,0); c[3].Color=features.esp.boxColor
+                           c[4].Visible=true; c[4].From=tr; c[4].To=tr+Vector2.new(0,len); c[4].Color=features.esp.boxColor
+                           c[5].Visible=true; c[5].From=bl; c[5].To=bl+Vector2.new(len,0); c[5].Color=features.esp.boxColor
+                           c[6].Visible=true; c[6].From=bl; c[6].To=bl-Vector2.new(0,len); c[6].Color=features.esp.boxColor
+                           c[7].Visible=true; c[7].From=br; c[7].To=br-Vector2.new(len,0); c[7].Color=features.esp.boxColor
+                           c[8].Visible=true; c[8].From=br; c[8].To=br-Vector2.new(0,len); c[8].Color=features.esp.boxColor
+                      elseif espConfig.boxStyle == "Filled" then
+                           cache.filledBox.Visible = true; cache.filledBox.Size = Vector2.new(width, height); cache.filledBox.Position = Vector2.new(vec.X - width/2, vec.Y - height/2); cache.filledBox.Color = features.esp.boxColor; cache.filledBox.Transparency = espConfig.fillTransparency
+                           cache.box.Visible = true; cache.box.Size = Vector2.new(width, height); cache.box.Position = Vector2.new(vec.X - width/2, vec.Y - height/2); cache.box.Color = features.esp.boxColor
+                      else
+                           cache.box.Visible = true; cache.box.Size = Vector2.new(width, height); cache.box.Position = Vector2.new(vec.X - width/2, vec.Y - height/2); cache.box.Color = features.esp.boxColor
+                      end
+                  end
+                  
+                  -- Name/Dist (Info) - ALWAYS UPDATE if Enabled, independent of Box
+                  if features.esp.infoEnabled then -- Now checks flag
+                      cache.name.Visible = true; cache.name.Text = p.Name; cache.name.Position = Vector2.new(vec.X, headPos.Y - 18); cache.name.Color = mainColor
+                      cache.dist.Visible = true; cache.dist.Text = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude) .. "m"; cache.dist.Position = Vector2.new(vec.X, vec.Y + height/2 + 2); cache.dist.Color = mainColor
+                  else
+                      cache.name.Visible = false; cache.dist.Visible = false
+                  end
+                  
+                  -- Health
+                  if features.esp.healthEnabled then
+                      local healthPct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                      local barHeight = height * healthPct
+                      if espConfig.healthStyle == "Bar" or espConfig.healthStyle == "Both" then
+                          cache.healthOutline.Visible = true; cache.healthOutline.Size = Vector2.new(4, height); cache.healthOutline.Position = Vector2.new(vec.X - width/2 - 6, vec.Y - height/2)
+                          cache.healthBar.Visible = true; cache.healthBar.Color = Color3.fromHSV(healthPct * 0.3, 1, 1); cache.healthBar.Size = Vector2.new(2, barHeight); cache.healthBar.Position = Vector2.new(vec.X - width/2 - 5, (vec.Y - height/2) + (height - barHeight))
+                      else cache.healthOutline.Visible=false; cache.healthBar.Visible=false end
+                      
+                      if espConfig.healthStyle == "Text" or espConfig.healthStyle == "Both" then
+                          cache.hpText.Visible = true; cache.hpText.Text = math.floor(hum.Health); cache.hpText.Position = Vector2.new(vec.X - width/2 - 20, vec.Y - height/2)
+                      else cache.hpText.Visible = false end
+                  else cache.healthOutline.Visible=false; cache.healthBar.Visible=false; cache.hpText.Visible=false end
+
+                  if espConfig.tsbClass then cache.classText.Visible = true; cache.classText.Text = getTSBClass(p); cache.classText.Position = Vector2.new(vec.X, headPos.Y - 32) else cache.classText.Visible = false end
+
+                  if features.esp.tracersEnabled then
+                      cache.tracer.Visible = true; cache.tracer.To = Vector2.new(vec.X, vec.Y)
+                      if espConfig.tracerOrigin == "Bottom" then cache.tracer.From = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y)
+                      elseif espConfig.tracerOrigin == "Center" then cache.tracer.From = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+                      else local m = UserInputService:GetMouseLocation(); cache.tracer.From = m end
+                  else cache.tracer.Visible = false end
+
+                  if features.esp.skeletonEnabled then
+                      local function line(idx, p1, p2)
+                          if not p1 or not p2 then return end -- Safety check
+                          local l = cache.skeleton[idx]; if not l then return end
+                          local v1, os1 = cam:WorldToViewportPoint(p1.Position); local v2, os2 = cam:WorldToViewportPoint(p2.Position)
+                          if os1 and os2 then l.Visible = true; l.From = Vector2.new(v1.X, v1.Y); l.To = Vector2.new(v2.X, v2.Y) else l.Visible = false end
+                      end
+                      if char:FindFirstChild("UpperTorso") then
+                          line(1, char:FindFirstChild("Head"), char:FindFirstChild("UpperTorso")); line(2, char:FindFirstChild("UpperTorso"), char:FindFirstChild("LeftUpperArm")); line(3, char:FindFirstChild("UpperTorso"), char:FindFirstChild("RightUpperArm"))
+                          line(4, char:FindFirstChild("LeftUpperArm"), char:FindFirstChild("LeftLowerArm")); line(5, char:FindFirstChild("RightUpperArm"), char:FindFirstChild("RightLowerArm"))
+                          line(6, char:FindFirstChild("UpperTorso"), char:FindFirstChild("LowerTorso")); line(7, char:FindFirstChild("LowerTorso"), char:FindFirstChild("LeftUpperLeg"))
+                          line(8, char:FindFirstChild("LowerTorso"), char:FindFirstChild("RightUpperLeg"))
+                          line(9, char:FindFirstChild("LeftUpperLeg"), char:FindFirstChild("LeftLowerLeg")); line(10, char:FindFirstChild("RightUpperLeg"), char:FindFirstChild("RightLowerLeg"))
+                      else -- TSB often uses R15 but if R6 fallback
+                             for _,l in pairs(cache.skeleton) do l.Visible=false end 
+                      end
+                  else for _,l in pairs(cache.skeleton) do l.Visible=false end end
+             else removeEsp(p) end
+        else removeEsp(p) end
+    end
+end)
+Players.PlayerRemoving:Connect(removeEsp)
+
+-- ESP UI
+local masterToggle = EspSection:Toggle({ name = "ESP Enabled", callback = function(bool) features.esp.enabled = bool; if not bool then for p,_ in pairs(espCache) do removeEsp(p) end end end })
+masterToggle:Toggle({ name = "Show TSB Class", callback = function(bool) espConfig.tsbClass = bool end })
+masterToggle:Toggle({ name = "Death Counter Highlight", callback = function(bool) espConfig.deathCounter = bool end })
+masterToggle:Toggle({ name = "Show Info (Name/Dist)", callback = function(bool) features.esp.infoEnabled = bool end }) -- NEW BUTTON
+
+local boxToggle = EspSection:Toggle({ name = "Boxes", callback = function(bool) features.esp.boxEnabled = bool end })
+boxToggle:Dropdown({ name = "Style", items = {"Full", "Filled", "Corner"}, default = "Corner", callback = function(val) espConfig.boxStyle = val end })
+boxToggle:Colorpicker({ name = "Color", default = Color3.new(1,0,0), callback = function(col) features.esp.boxColor = col end })
+boxToggle:Slider({ name = "Fill Transparency", min = 0, max = 1, default = 0.5, callback = function(val) espConfig.fillTransparency = val end })
+
+local healthToggle = EspSection:Toggle({ name = "Health", callback = function(bool) features.esp.healthEnabled = bool end })
+healthToggle:Dropdown({ name = "Style", items = {"Bar", "Text", "Both"}, default = "Bar", callback = function(val) espConfig.healthStyle = val end })
+
+local tracerToggle = EspSection:Toggle({ name = "Tracers", callback = function(bool) features.esp.tracersEnabled = bool end })
+tracerToggle:Dropdown({ name = "Origin", items = {"Bottom", "Center", "Mouse"}, default = "Bottom", callback = function(val) espConfig.tracerOrigin = val end })
+
+EspSection:Toggle({ name = "Skeleton", callback = function(bool) features.esp.skeletonEnabled = bool end })
+EspSection:Toggle({ name = "Chams", callback = function(bool) features.esp.chamsEnabled = bool end })
+
+-- World UI
+local cc = Lighting:FindFirstChild("TSB_CC") or Instance.new("ColorCorrectionEffect", Lighting); cc.Name = "TSB_CC"; cc.Enabled = false
+local blur = Lighting:FindFirstChild("TSB_Blur") or Instance.new("BlurEffect", Lighting); blur.Name = "TSB_Blur"; blur.Size = 0; blur.Enabled = false
+
+local function uiToggleWorld(bool) if bool then cc.Enabled=true else cc.Enabled=false; blur.Enabled=false end end -- Helper
+
+local worldToggle = WorldSection:Toggle({ name = "World Modifications", callback = function(bool) features.lighting.enabled = bool; uiToggleWorld(bool) end }) 
+worldToggle:Colorpicker({ name = "Fog Color", default = Color3.new(0.5,0.5,0.5), callback = function(col) Lighting.FogColor = col end })
+worldToggle:Slider({ name = "Time", min=0, max=24, default=14, callback = function(val) Lighting.TimeOfDay = tostring(val)..":00:00" end })
+worldToggle:Slider({ name = "Brightness", min=0, max=10, default=2, callback = function(val) Lighting.Brightness = val end })
+worldToggle:Slider({ name = "Saturation", min=0, max=2, default=1, callback = function(val) cc.Saturation = val end })
+worldToggle:Slider({ name = "Contrast", min=0, max=2, default=1, callback = function(val) cc.Contrast = val end })
+worldToggle:Slider({ name = "Blur Size", min=0, max=30, default=0, callback = function(val) blur.Size = val; blur.Enabled = (val > 0) end })
+
+
+-- ====================
+-- TAB: BLATANT
+-- ====================
+local BlatantCombat = BlatantTab:Section({ name = "Combat", side = "left" })
+local BlatantChar = BlatantTab:Section({ name = "Character & TP", side = "right" })
+
+BlatantCombat:Dropdown({ name = "Target Mode", items = {"closest to player", "closest to mouse"}, default = "closest to player", callback = function(val) features.aimbot.mode = val end })
+BlatantCombat:Toggle({
+    name = "Garou Insta Kill",
+    callback = function(bool)
+         getgenv().instaKillActive = bool 
+         if bool then
+            getgenv().instaKillLoop = coroutine.create(function()
+                local animations = {["rbxassetid://12273188754"] = 1.31, ["rbxassetid://12296113986"] = 1.2}
                 while true do
                     task.wait()
-                    if not boolean then break end -- Stop if toggle is off
-
-                    local character = plr.Character
-                    local animate = character.Humanoid.Animator
-
-                    for i, v in pairs(animate:GetPlayingAnimationTracks()) do
-                        if ifind(animations, v.Animation.AnimationId) then
-                            task.wait(animations[v.Animation.AnimationId])
-                            dothetech = true
-                            lastcf = character.HumanoidRootPart.CFrame
-
-                            v.Stopped:Connect(function()
-                                dothetech = false
-                            end)
-
-                            repeat
-                                task.wait()
-                                workspace.Camera.CameraType = Enum.CameraType.Scriptable
-                                character.HumanoidRootPart.CFrame = CFrame.new(0, -300, 0)
-                                character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-                                character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
-                            until not dothetech
-
-                            task.wait(0.1)
-                            character.HumanoidRootPart.CFrame = lastcf
-                            workspace.Camera.CameraType = Enum.CameraType.Custom
-                            workspace.Camera.CameraSubject = character.Humanoid
-                            task.wait(1)
-                        end
+                    local char = LocalPlayer.Character
+                    if char and char:FindFirstChild("Humanoid") then
+                         local animator = char.Humanoid:FindFirstChild("Animator")
+                         if animator then
+                             for _, v in pairs(animator:GetPlayingAnimationTracks()) do
+                                if animations[v.Animation.AnimationId] then
+                                    task.wait(animations[v.Animation.AnimationId])
+                                    local dothetech = true
+                                    local lastcf = char.HumanoidRootPart.CFrame
+                                    v.Stopped:Connect(function() dothetech = false end)
+                                    repeat
+                                        task.wait()
+                                        Workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+                                        char.HumanoidRootPart.CFrame = CFrame.new(0, -300, 0)
+                                        char.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+                                        char.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                                    until not dothetech
+                                    task.wait(0.1)
+                                    char.HumanoidRootPart.CFrame = lastcf
+                                    Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+                                    Workspace.CurrentCamera.CameraSubject = char.Humanoid
+                                    task.wait(1)
+                                end
+                             end
+                         end
                     end
                 end
             end)
-            coroutine.resume(getgenv().loop)
+            coroutine.resume(getgenv().instaKillLoop)
         else
-            -- Stop the loop
-            if getgenv().loop then
-                coroutine.close(getgenv().loop)
-                getgenv().loop = nil
-            end
+            if getgenv().instaKillLoop then coroutine.close(getgenv().instaKillLoop) end
         end
     end
 })
+BlatantCombat:Button({ name = "Fling All (External)", callback = function() loadstring(game:HttpGet("https://pastebin.com/raw/zqyDSUWX"))() end })
 
+BlatantChar:Toggle({ name = "No Stun", callback = function(bool) features.noStun = bool end })
+BlatantChar:Toggle({ name = "Anti Fling", callback = function(bool) features.antiFling.enabled = bool end })
+BlatantChar:Toggle({ name = "Anti Death", callback = function(bool) features.antiDeath.enabled = bool end })
+BlatantChar:Toggle({ name = "No Animations", callback = function(bool) features.stopAnims = bool end })
+BlatantChar:Toggle({ name = "Noclip", callback = function(bool) features.noclip = bool end })
+BlatantChar:Toggle({ name = "Infinite Jump", callback = function(bool) features.infJump = bool end })
 
-local Section = Tab:Section({
-    text = "Anti death"
-})
-
-local originalPosition
-
-Section:Dropdown({
-    text = "Anti Death(really dont use this)",
-    list = {"True", "False"},  -- The options for the dropdown
-    default = "False",  -- Default value
-    callback = function(selectedOption)
-        local player = game.Players.LocalPlayer
-
-        -- Function to teleport the player
-        local function teleportToPosition(position, anchor)
-            local character = player.Character
-            if character then
-                -- Make sure the character is fully loaded
-                local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-                local humanoid = character:WaitForChild("Humanoid")
-
-                -- Update position and set anchoring
-                humanoidRootPart.CFrame = CFrame.new(position)
-                humanoidRootPart.Anchored = anchor  -- Set the anchoring based on the argument
-
-                -- Ensure the rest of the body follows the teleportation (Humanoid)
-                for _, part in pairs(character:GetChildren()) do
-                    if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                        part.CFrame = humanoidRootPart.CFrame  -- Sync other parts with HumanoidRootPart
-                    end
-                end
-
-                -- Ensure the character's hitbox is properly positioned and not underground
-                if humanoid and humanoidRootPart then
-                    humanoidRootPart.Anchored = true
-                    humanoidRootPart.CFrame = CFrame.new(position)  -- Position the HumanoidRootPart correctly
-                    humanoid:MoveTo(humanoidRootPart.Position)  -- Ensure the humanoid's position is updated
-                    humanoidRootPart.Anchored = false
-                end
-            end
-        end
-
-        -- Function to get the player's character and humanoid
-        local function getCharacter()
-            local character = player.Character or player.CharacterAdded:Wait()
-            local humanoid = character:WaitForChild("Humanoid")
-            return character, humanoid
-        end
-
-        -- Handle teleportation logic based on the selected option
-        if selectedOption == "True" then
-            while true do
-                -- Check if player is alive, and get character and humanoid
-                local character, humanoid = getCharacter()
-
-                -- Check if the player's health is below 20%
-                if humanoid.Health < 20 then
-                    -- Save the current position if health is under 20%
-                    if not originalPosition then
-                        originalPosition = character.PrimaryPart.Position
-                    end
-
-                    -- Teleport to the specified coordinates and anchor the character
-                    teleportToPosition(Vector3.new(-10.58532428741455, 808.4442749023438, -378.9240417480469), true)
-                elseif humanoid.Health > 80 and originalPosition then
-                    -- Teleport back to the saved position, un-anchor the character
-                    teleportToPosition(originalPosition, false)
-                    originalPosition = nil -- Reset the saved position
-                end
-
-                -- Wait for a short time before checking again
-                wait(0.5)
-            end
-        elseif selectedOption == "False" then
-            -- If "False" is selected, stop teleportation and reset position
-            originalPosition = nil
-        end
+-- TPs
+local tpTarget = "None"
+local tpNames = {"None", "Safe Zone", "Mid", "Void"}
+BlatantChar:Dropdown({ name = "Select TP Target", items = tpNames, default = "None", callback = function(val) tpTarget = val end })
+BlatantChar:Button({ name = "Teleport Now", callback = function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    if tpTarget == "Safe Zone" then char.HumanoidRootPart.CFrame = CFrame.new(-10, 808, -378)
+    elseif tpTarget == "Mid" then char.HumanoidRootPart.CFrame = CFrame.new(0, 50, 0)
+    elseif tpTarget == "Void" then char.HumanoidRootPart.CFrame = CFrame.new(0, -490, 0)
+    else 
+        local tPlayer = Players:FindFirstChild(tpTarget)
+        if tPlayer and tPlayer.Character then char.HumanoidRootPart.CFrame = tPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,3) end
     end
-})
-
-local Section = Tab:Section({
-    text = "No animations"
-})
-
-local stopAnimations = false -- Default state of the toggle
-
--- Toggle to enable/disable stopping animations
-Section:Toggle({
-    text = "Stop Animations",
-    state = false, -- Default is off
-    callback = function(state)
-        stopAnimations = state
-        print("Stop Animations toggled: ", stopAnimations)
-    end
-})
-
--- Function to stop all animations on the character
-local function stopAllAnimations(character)
-    local humanoid = character:FindFirstChild("Humanoid")
-    if not humanoid then return end
-
-    -- Prevent new animations from being played
-    humanoid.Animator.AnimationPlayed:Connect(function(animationTrack)
-        if stopAnimations then
-            animationTrack:Stop() -- Stops the animation immediately
-            print("Animation prevented: " .. animationTrack.Animation.AnimationId)
-        end
-    end)
-
-    -- Stop any currently running animations when toggle is turned on
-    if stopAnimations then
-        for _, track in ipairs(humanoid.Animator:GetPlayingAnimationTracks()) do
-            track:Stop()
-            print("Stopped currently playing animation: " .. track.Animation.AnimationId)
-        end
-    end
-end
-
--- Listen for character respawn and apply animation prevention
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-
-player.CharacterAdded:Connect(function(character)
-    -- Wait for the character to fully load
-    character:WaitForChild("HumanoidRootPart")
-    character:WaitForChild("Humanoid")
-    stopAllAnimations(character)
-end)
-
--- Apply to the current character (if it exists)
-if player.Character then
-    stopAllAnimations(player.Character)
-end
-
-
-local Section = Tab:Section({
-    text = "TP with move"
-})
-
--- Place coordinates for dropdown
-local dropdownOptions = {
-    ["None"] = nil, -- Default option for no teleportation
-    ["Left Mountain"] = Vector3.new(376.96, 699.10, 362.13),
-    ["Right Mountain"] = Vector3.new(236.28, 699.10, 415.91),
-    ["Looking Down"] = Vector3.new(4.35, 652.52, -336.13),
-    ["Middle of the Map"] = Vector3.new(142.37, 440.76, 22.41),
-    ["Gate 1"] = Vector3.new(291.19, 439.51, 375.03),
-    ["Gate 2"] = Vector3.new(10.45, 439.51, -306.24),
-    ["Death Counter Room"] = Vector3.new(-65.18, 29.25, 20347.43),
-    ["Atomic Room"] = Vector3.new(1064.54, 131.29, 23007.78)
-}
-
--- Default selection
-local chosenLocation = dropdownOptions["None"]
-
--- Create Dropdown
-Section:Dropdown({
-    text = "Choose Location",
-    list = {"None", "Left Mountain", "Right Mountain", "Looking Down", "Middle of the Map", "Gate 1", "Gate 2", "Death Counter Room", "Atomic Room"},
-    default = "None",
-    callback = function(selected)
-        chosenLocation = dropdownOptions[selected]
-        print("Selected Location: " .. selected)
-    end
-})
-
--- Function to connect the AnimationPlayed event
-local function connectAnimationEvent(character)
-    local humanoid = character:FindFirstChild("Humanoid")
-    if not humanoid then return end
-
-    humanoid.Animator.AnimationPlayed:Connect(function(animationTrack)
-        local animationId = tostring(animationTrack.Animation.AnimationId):match("%d+")
-        if animationId == "12273188754" or animationId == "12296113986" then
-            print("Animation triggered: " .. animationId)
-            if chosenLocation then
-                character:SetPrimaryPartCFrame(CFrame.new(chosenLocation))
-                print("Teleported to: " .. tostring(chosenLocation))
-            else
-                print("No location selected. Teleportation skipped.")
-            end
-        end
-    end)
-end
-
--- Listen for character respawn
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-
-player.CharacterAdded:Connect(function(character)
-    -- Wait for the character to fully load
-    character:WaitForChild("HumanoidRootPart")
-    character:WaitForChild("Humanoid")
-    connectAnimationEvent(character)
-end)
-
--- Connect to the current character (if it exists)
-if player.Character then
-    connectAnimationEvent(player.Character)
-end
-
-
-local Section = Tab:Section({
-    text = "TP"
-})
-
-local StarterGui = game:GetService("StarterGui")
-local UserInputService = game:GetService("UserInputService")
-local Players = game:GetService("Players")
-
-local player = Players.LocalPlayer
-local Character = character or player.CharacterAdded:Wait()
-local humanoid = Character:WaitForChild("Humanoid")
-local mouse = player:GetMouse()
-
-local teleportKey = Enum.KeyCode.T
-local teleportEnabled = false
-
--- Animation setup
-local anim = Instance.new("Animation")
-anim.AnimationId = "rbxassetid://15957361339"
-local track = humanoid:LoadAnimation(anim)
-
--- Toggle for enabling/disabling teleport
-Section:Toggle({
-    text = "Enable Teleport",
-    callback = function(state)
-        teleportEnabled = state
-        print("Teleport Enabled: " .. tostring(state))
-
-        if state then
-            game.StarterGui:SetCore("SendNotification", {
-                Title = "Teleport Keybind",
-                Text = "Keybind for tp is 'T'",
-                Duration = 5
-            })
-        end
-    end
-})
-
-
--- Teleport on key press
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if teleportEnabled and input.KeyCode == teleportKey then
+end})
+BlatantChar:Button({ name = "Give Click TP Tool", callback = function()
+    local mouse = LocalPlayer:GetMouse()
+    local tool = Instance.new("Tool"); tool.RequiresHandle = false; tool.Name = "Click TP"
+    tool.Activated:Connect(function()
         local pos = mouse.Hit.Position + Vector3.new(0, 2.5, 0)
-        Character:WaitForChild("HumanoidRootPart").CFrame = CFrame.new(pos)
-        track:Play()
-    end
-end)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pos.X, pos.Y, pos.Z) end
+    end)
+    tool.Parent = LocalPlayer.Backpack
+end })
 
+-- Flight Logic (LinearVelocity)
+local flySpeed = 1
+local flying = false
+local flyBV, flyAtt
 
+local function startFly()
+     if not LocalPlayer.Character then return end
+     local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+     local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+     if not hrp or not hum then return end
+     
+     if flyBV then flyBV:Destroy() end
+     if flyAtt then flyAtt:Destroy() end
 
-local chosenLocation = Vector3.new(0, 0, 0) -- Default teleport location
-
--- Place coordinates for dropdown (adjust as needed)
-local dropdownOptions = {
-    ["None"] = nil, -- Default option for no teleportation
-    ["Left Mountain"] = Vector3.new(376.96, 699.10, 362.13),
-    ["Right Mountain"] = Vector3.new(236.28, 699.10, 415.91),
-    ["Looking Down"] = Vector3.new(4.35, 652.52, -336.13),
-    ["Middle of the Map"] = Vector3.new(142.37, 440.76, 22.41),
-    ["Gate 1"] = Vector3.new(291.19, 439.51, 375.03),
-    ["Gate 2"] = Vector3.new(10.45, 439.51, -306.24),
-    ["Death Counter Room"] = Vector3.new(-65.18, 29.25, 20347.43),
-    ["Atomic Room"] = Vector3.new(1064.54, 131.29, 23007.78)
-}
-
--- Create Dropdown
-Section:Dropdown({
-    text = "Choose Location to Teleport",
-    list = {"None", "Left Mountain", "Right Mountain", "Looking Down", "Middle of the Map", "Gate 1", "Gate 2", "Death Counter Room", "Atomic Room"},
-    default = "None",
-    callback = function(selected)
-        chosenLocation = dropdownOptions[selected]
-        print("Selected Location: " .. selected)
-    end
-})
-
--- Button to manually teleport
-Section:Button({
-    text = "Teleport Now",
-    callback = function()
-        if chosenLocation then
-            local character = game.Players.LocalPlayer.Character
-            if character then
-                -- Teleport to selected location
-                character:SetPrimaryPartCFrame(CFrame.new(chosenLocation))
-                print("Teleported to: " .. tostring(chosenLocation))
-            else
-                print("Character not found.")
-            end
-        else
-            print("No location selected.")
+     flyAtt = Instance.new("Attachment", hrp)
+     flyBV = Instance.new("LinearVelocity", hrp)
+     flyBV.Attachment0 = flyAtt
+     flyBV.MaxForce = math.huge
+     flyBV.VectorVelocity = Vector3.zero
+     flyBV.RelativeTo = Enum.ActuatorRelativeTo.World
+     
+     hum.PlatformStand = true
+     
+     RunService:BindToRenderStep("FlyStep", Enum.RenderPriority.Camera.Value, function()
+        if not flying or not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") then 
+            RunService:UnbindFromRenderStep("FlyStep")
+            if flyBV then flyBV:Destroy() end; if flyAtt then flyAtt:Destroy() end
+            if hum then hum.PlatformStand = false end
+            return
         end
-    end
-})
-
-local chosenPlayer = nil -- Default to no player selected
-
--- Create Dropdown for player selection
-local playerNames = {} -- Table to store player names for dropdown options
-
-for _, player in ipairs(game.Players:GetPlayers()) do
-    table.insert(playerNames, player.Name) -- Add player names to the list
-end
-
--- Create Dropdown for selecting a player
-Section:Dropdown({
-    text = "Choose Player to Teleport To",
-    list = playerNames,
-    default = "None",
-    callback = function(selected)
-        if selected == "None" then
-            chosenPlayer = nil
-        else
-            chosenPlayer = game.Players:FindFirstChild(selected)
-        end
-        print("Selected Player: " .. (chosenPlayer and chosenPlayer.Name or "None"))
-    end
-})
-
--- Button to manually teleport to the selected player
-Section:Button({
-    text = "Teleport to Player",
-    callback = function()
-        if chosenPlayer then
-            local character = game.Players.LocalPlayer.Character
-            if character and chosenPlayer.Character then
-                -- Teleport to the chosen player's position
-                character:SetPrimaryPartCFrame(chosenPlayer.Character.HumanoidRootPart.CFrame)
-                print("Teleported to player: " .. chosenPlayer.Name)
-            else
-                print("Player or character not found.")
-            end
-        else
-            print("No player selected.")
-        end
-    end
-})
-
-local Section = Tab:Section({
-    text = "Speed"
-})
-
-local speed = 10 -- Default speed value
-local canChangeSpeed = false -- Controls whether the speed can be changed
-
--- Function to set player speed
-local function setPlayerSpeed()
-    -- Ensure the character exists and the humanoid is available
-    local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
-    if humanoid then
-        humanoid.WalkSpeed = speed
-    end
-end
-
--- Toggle for controlling whether the speed can be modified
-Section:Toggle({
-    text = "Toggle Speed Control",
-    state = false, -- Default boolean
-    callback = function(boolean)
-        print("Speed control toggle: ", boolean)
-        if boolean then
-            -- Enable speed adjustment if toggle is on
-            canChangeSpeed = true
-        else
-            -- Disable speed adjustment if toggle is off
-            canChangeSpeed = false
-        end
-    end
-})
-
--- Slider for controlling speed
-Section:Slider({
-    text = "Set Speed",
-    min = 30, -- Minimum speed value
-    max = 1000, -- Maximum speed value
-    callback = function(number)
-        if canChangeSpeed then
-            -- Make sure the speed stays within the defined limits
-            speed = math.clamp(number, 10, 100)
-            -- Set the player's walk speed to the slider value
-            setPlayerSpeed()  -- Apply the speed immediately
-            print("Speed set to: ", speed)
-        else
-            -- If toggle is off, the speed can't be changed
-            print("Speed control is disabled.")
-        end
-    end
-})
-
--- Continuously set the speed
-game:GetService("RunService").Heartbeat:Connect(function()
-    if canChangeSpeed then
-        setPlayerSpeed() -- Continuously apply the speed if enabled
-    end
-end)
-
-
-local Section = Tab:Section({
-    text = "Insta Kill Garou TP"
-})
-
-
--- Function to equip and use a move from the player's inventory
-local function equipAndUseMove(moveName)
-    local tool = game.Players.LocalPlayer.Backpack:FindFirstChild(moveName)
-    if tool then
-        tool.Parent = game.Players.LocalPlayer.Character
-        -- Assuming the tool is activated on Equip, you can add specific behavior if needed
-        tool:Activate()
-    else
-        warn("Tool not found:", moveName)
-    end
-    return tool
-end
-
--- Function to unequip the tool from the player's character
-local function unequipMove()
-    local tool = game.Players.LocalPlayer.Character:FindFirstChild("Flowing Water")
-    if tool then
-        tool.Parent = game.Players.LocalPlayer.Backpack
-    else
-        warn("Tool 'Flowing Water' not found to unequip.")
-    end
-end
-
--- Function to update the players list for the dropdown
-local function updatePlayersList()
-    local playersList = {}
-    for _, otherPlayer in pairs(game.Players:GetPlayers()) do
-        table.insert(playersList, otherPlayer.Name)  -- Add player names to the dropdown list
-    end
-    return playersList
-end
-
--- Initial dropdown setup with updated player list
-local playersList = updatePlayersList()
-
-Section:Dropdown({
-    text = "Select Target Player",  -- Display name of the dropdown
-    list = playersList,             -- List of players for the dropdown
-    default = playersList[1],       -- Default selected player
-    callback = function(selectedPlayerName)
-        -- When a player is selected from the dropdown
-        local targetPlayer = game.Players:FindFirstChild(selectedPlayerName)
         
-        if targetPlayer then
-            -- Target player found, perform actions
-            local targetRootPart = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if targetRootPart then
-                -- Save the current player's position
-                local currentPlayer = game.Players.LocalPlayer.Character
-                local initialPosition = currentPlayer.HumanoidRootPart.Position
+        local cam = Workspace.CurrentCamera
+        local ctrl = {f=0, b=0, l=0, r=0}
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then ctrl.f = 1 end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then ctrl.b = 1 end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then ctrl.l = 1 end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then ctrl.r = 1 end
+        
+        local speed = flySpeed * 50
+        local dir = Vector3.zero
+        dir = dir + cam.CFrame.LookVector * (ctrl.f - ctrl.b)
+        dir = dir + cam.CFrame.RightVector * (ctrl.r - ctrl.l)
+        
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0,1,0) end
+        
+        flyBV.VectorVelocity = dir * speed
+        hum.PlatformStand = true
+     end)
+end
 
-                -- Repeatedly teleport behind the target and perform actions
-                local duration = 1.7  -- Initial teleport duration in seconds
-                local startTime = tick()
+-- Infinite Jump
+UserInputService.JumpRequest:Connect(function()
+    if features.infJump then
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
 
-                -- Initial teleportation while using the move
-                while tick() - startTime < duration do
-                    -- Calculate position closer behind the target player (using a smaller multiplier for closer distance)
-                    local targetPosition = targetRootPart.Position
-                    local behindTargetPosition = targetPosition - (targetRootPart.CFrame.LookVector * 2)  -- Adjust to a closer distance, e.g., *3 instead of *5
-                    currentPlayer:SetPrimaryPartCFrame(CFrame.new(behindTargetPosition))
+-- Aggressive Loops
+RunService.Stepped:Connect(function()
+    -- No Stun: Clear Attributes AND Children
+    if features.noStun and LocalPlayer.Character then
+        local char = LocalPlayer.Character
+        char:SetAttribute("Stunned", false)
+        char:SetAttribute("Ragdoll", false)
+        char:SetAttribute("Freeze", false)
+        for _, v in pairs(char:GetChildren()) do
+            if v.Name == "Ragdoll" or v.Name == "Stun" or v.Name == "Freeze" or v.Name=="Stunned" then v:Destroy() end
+        end
+    end
+    -- Noclip
+    if features.noclip and LocalPlayer.Character then
+        for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
+            if v:IsA("BasePart") and v.CanCollide == true then v.CanCollide = false end
+        end
+    end
+    -- No Anim: Hook
+    if features.stopAnims and LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if hum then
+             for _, t in pairs(hum:GetPlayingAnimationTracks()) do t:Stop() end
+             if hum.Animator and not animPlayedConnection then
+                 animPlayedConnection = hum.Animator.AnimationPlayed:Connect(function(t) t:Stop() end)
+             end
+        end
+    elseif animPlayedConnection then
+        animPlayedConnection:Disconnect()
+        animPlayedConnection = nil
+    end
+end)
 
-                    -- Make the player look at the target while behind them
-                    currentPlayer.HumanoidRootPart.CFrame = CFrame.new(currentPlayer.HumanoidRootPart.Position, targetRootPart.Position)
-
-                    -- Equip and use "Flowing Water"
-                    equipAndUseMove("Flowing Water")
-
-                    wait(0.1)  -- Small wait to make the action continuous
+RunService.Heartbeat:Connect(function()
+    -- Anti Fling: BaseParts
+    if features.antiFling.enabled then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                for _, v in pairs(p.Character:GetDescendants()) do
+                    if v:IsA("BasePart") then v.CanCollide = false; v.Velocity = Vector3.zero end
                 end
-
-                -- Teleport up 2000 studs and 10000 studs forward after completing the move
-                local newPosition = currentPlayer.HumanoidRootPart.Position + Vector3.new(10000, 2000, 0)
-                currentPlayer:SetPrimaryPartCFrame(CFrame.new(newPosition))
-
-                -- After the teleportation, return to the initial position
-                wait(0.5)  -- Optional wait before returning
-                currentPlayer:SetPrimaryPartCFrame(CFrame.new(initialPosition))  -- Teleport back to the initial position
-
-                -- Unequip the tool after completion
-                unequipMove()
-            else
-                warn("Target player does not have a HumanoidRootPart.")
             end
-        else
-            warn("Player not found with the name: " .. selectedPlayerName)
+        end
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function() if flying then task.wait(0.5); startFly() end end)
+
+-- ====================
+-- TAB: MISC
+-- ====================
+local MiscLeft = MiscTab:Section({ name = "Main Settings", side = "left" })
+local MiscRight = MiscTab:Section({ name = "Helper & Fun", side = "right" })
+
+MiscLeft:Toggle({
+    name = "Flight",
+    callback = function(bool)
+        flying = bool
+        if bool then 
+            startFly() 
+        else 
+            RunService:UnbindFromRenderStep("FlyStep")
+            if LocalPlayer.Character then
+                local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+                local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hum then hum.PlatformStand = false end
+                if hrp then 
+                    hrp.Anchored = false 
+                    hrp.AssemblyLinearVelocity = Vector3.zero -- Stop momentum
+                    hrp.AssemblyAngularVelocity = Vector3.zero
+                end
+            end
+            if flyBV then flyBV:Destroy(); flyBV = nil end
+            if flyAtt then flyAtt:Destroy(); flyAtt = nil end
         end
     end
 })
+MiscLeft:Slider({ name = "Flight Speed", min = 1, max = 10, default = 1, suffix = "x", callback = function(val) flySpeed = val end })
 
--- Add the "Kill Player" button
-Section:Button({
-    text = "Kill Player",
-    callback = function()
-        -- Get the username from the dropdown
-        local targetUsername = Section:FindFirstChild("Dropdown").Value
-        local targetPlayer = game.Players:FindFirstChild(targetUsername)
+-- Speed Mod (Aggressive Property Signal)
+local currentWs, currentJp, moveEnabled = 16, 50, false
+MiscLeft:Toggle({ name = "Enable Speed/Jump", callback = function(bool) moveEnabled = bool 
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+    if hum and bool then hum.WalkSpeed = currentWs; hum.JumpPower = currentJp end
+end })
+MiscLeft:Slider({ name = "Walk Speed", min = 16, max = 200, default = 16, suffix = " spd", callback = function(val) currentWs = val end })
+MiscLeft:Slider({ name = "Jump Power", min = 50, max = 300, default = 50, suffix = " pwr", callback = function(val) currentJp = val end })
 
-        if targetPlayer then
-            -- Target player found, perform actions
-            local targetRootPart = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if targetRootPart then
-                -- Save the current player's position
-                local currentPlayer = game.Players.LocalPlayer.Character
-                local initialPosition = currentPlayer.HumanoidRootPart.Position
+-- Character Connected Logic
+LocalPlayer.CharacterAdded:Connect(function(char)
+    local hum = char:WaitForChild("Humanoid")
+    hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+        if moveEnabled and hum.WalkSpeed ~= currentWs then hum.WalkSpeed = currentWs end
+    end)
+    hum:GetPropertyChangedSignal("JumpPower"):Connect(function()
+        if moveEnabled and hum.JumpPower ~= currentJp then hum.JumpPower = currentJp end
+    end)
+end)
 
-                -- Repeatedly teleport behind the target and perform actions
-                local duration = 1.7  -- Initial teleport duration in seconds
-                local startTime = tick()
+-- Initial Hook
+if LocalPlayer.Character then
+    local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+    if hum then
+        hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function() if moveEnabled and hum.WalkSpeed ~= currentWs then hum.WalkSpeed = currentWs end end)
+        hum:GetPropertyChangedSignal("JumpPower"):Connect(function() if moveEnabled and hum.JumpPower ~= currentJp then hum.JumpPower = currentJp end end)
+    end
+end
 
-                -- Initial teleportation while using the move
-                while tick() - startTime < duration do
-                    -- Calculate position closer behind the target player (using a smaller multiplier for closer distance)
-                    local targetPosition = targetRootPart.Position
-                    local behindTargetPosition = targetPosition - (targetRootPart.CFrame.LookVector * 2)  -- Adjust to a closer distance, e.g., *3 instead of *5
-                    currentPlayer:SetPrimaryPartCFrame(CFrame.new(behindTargetPosition))
+-- Anti Void Re-Implementation
+MiscRight:Toggle({ name = "Anti Void", callback = function(bool) 
+    if bool then
+        if features.antiVoid.platform then features.antiVoid.platform:Destroy() end -- Reset
+        local p = Instance.new("Part", Workspace)
+        p.Size = Vector3.new(9999, 10, 9999) -- Huge
+        p.Position = Vector3.new(0, -300, 0)
+        p.Anchored = true
+        p.CanCollide = true
+        p.Transparency = 0.5
+        p.BrickColor = BrickColor.new("Royal purple")
+        p.Name = "AntiVoidPlatform"
+        features.antiVoid.platform = p
+    else
+        if features.antiVoid.platform then features.antiVoid.platform:Destroy() end
+    end
+end })
+MiscRight:Toggle({ name = "Anti DC", callback = function(bool) if bool then local c = Workspace:FindFirstChild("Cutscenes"); if c and c:FindFirstChild("Death Cutscene") then c["Death Cutscene"]:Destroy() end end end })
 
-                    -- Make the player look at the target while behind them
-                    currentPlayer.HumanoidRootPart.CFrame = CFrame.new(currentPlayer.HumanoidRootPart.Position, targetRootPart.Position)
+local playerNames = {"None"} 
+for _, p in ipairs(Players:GetPlayers()) do table.insert(playerNames, p.Name) end
+MiscRight:Dropdown({ name = "Emote Follow", items = playerNames, default = "None", callback = function(val)
+    features.bootyClap.target = Players:FindFirstChild(val or "")
+    features.bootyClap.following = (val ~= "None" and features.bootyClap.target)
+    if features.bootyClap.following and not features.bootyClap.loop then
+         local anim = Instance.new("Animation"); anim.AnimationId = "rbxassetid://120789866363939"
+         local track = LocalPlayer.Character.Humanoid.Animator:LoadAnimation(anim); track:Play()
+         features.bootyClap.loop = RunService.Heartbeat:Connect(function()
+             if not features.bootyClap.following or not features.bootyClap.target then track:Stop(); if features.bootyClap.loop then features.bootyClap.loop:Disconnect(); features.bootyClap.loop = nil end return end
+             local tChar = features.bootyClap.target.Character
+             if tChar and tChar:FindFirstChild("HumanoidRootPart") then LocalPlayer.Character.HumanoidRootPart.CFrame = tChar.HumanoidRootPart.CFrame * CFrame.new(0,0,3) end
+         end)
+    end
+end })
 
-                    -- Equip and use "Flowing Water"
-                    equipAndUseMove("Flowing Water")
+-- Watermark (Ported from example.lua)
+local gamesense = Instance.new("ScreenGui")
+local Watermark2 = Instance.new("Frame")
+local _1 = Instance.new("Frame")
+local A = Instance.new("TextLabel")
+local T = Instance.new("TextLabel")
+local E = Instance.new("TextLabel")
+local B = Instance.new("TextLabel")
+local back1 = Instance.new("TextLabel")
+local FPS = Instance.new("TextLabel")
+local Femboysense = Instance.new("TextLabel")
 
-                    wait(0.1)  -- Small wait to make the action continuous
-                end
+gamesense.Name = "gamesense"
+gamesense.Parent = game:GetService("CoreGui")
+gamesense.DisplayOrder = 99999999
+gamesense.ResetOnSpawn = false
+gamesense.IgnoreGuiInset = true
 
-                -- Teleport up 2000 studs and 10000 studs forward after completing the move
-                local newPosition = currentPlayer.HumanoidRootPart.Position + Vector3.new(10000, 2000, 0)
-                currentPlayer:SetPrimaryPartCFrame(CFrame.new(newPosition))
+Watermark2.Name = "Watermark2"
+Watermark2.Parent = gamesense
+Watermark2.Active = true
+Watermark2.AnchorPoint = Vector2.new(1, 0)
+Watermark2.BackgroundColor3 = Color3.new(0.0862745, 0.0862745, 0.0862745)
+Watermark2.BorderColor3 = Color3.new(0.262745, 0.262745, 0.262745)
+Watermark2.BorderSizePixel = 0
+Watermark2.Draggable = true
+Watermark2.Position = UDim2.new(1, -10, 0, 10)
+Watermark2.Selectable = true
+Watermark2.Size = UDim2.new(0, 200, 0, 18)
+Watermark2.ZIndex = 999999998
 
-                -- After the teleportation, return to the initial position
-                wait(0.5)  -- Optional wait before returning
-                currentPlayer:SetPrimaryPartCFrame(CFrame.new(initialPosition))  -- Teleport back to the initial position
+_1.Name = "1"
+_1.Parent = Watermark2
+_1.BackgroundColor3 = Color3.new(0.25098, 0.25098, 0.25098)
+_1.BorderColor3 = Color3.new(0.262745, 0.262745, 0.262745)
+_1.BorderSizePixel = 0
+_1.Position = UDim2.new(0, -1, 0, -1)
+_1.Size = UDim2.new(1, 2, 1, 2)
+_1.ZIndex = -1
 
-                -- Unequip the tool after completion
-                unequipMove()
-            else
-                warn("Target player does not have a HumanoidRootPart.")
-            end
-        else
-            warn("Player not found with the username: " .. targetUsername)
+Femboysense.Name = "Femboysense"
+Femboysense.Parent = Watermark2
+Femboysense.BackgroundColor3 = Color3.new(1, 1, 1)
+Femboysense.BackgroundTransparency = 1
+Femboysense.BorderSizePixel = 0
+Femboysense.Position = UDim2.new(0, 6, 0, 0)
+Femboysense.Size = UDim2.new(0, 90, 1, 0)
+Femboysense.ZIndex = 999999999
+Femboysense.Font = Enum.Font.Code
+Femboysense.Text = "[femboy.sense]"
+Femboysense.TextColor3 = Color3.new(1, 1, 1)
+Femboysense.TextSize = 12
+Femboysense.TextXAlignment = Enum.TextXAlignment.Left
+
+B.Name = "B"
+B.Parent = Watermark2
+B.BackgroundColor3 = Color3.new(0.00784314, 0.00784314, 0.00784314)
+B.BackgroundTransparency = 1
+B.BorderSizePixel = 0
+B.Position = UDim2.new(0, 96, 0, 0)
+B.Size = UDim2.new(0, 10, 1, 0)
+B.ZIndex = 999999999
+B.Font = Enum.Font.Ubuntu
+B.Text = "B"
+B.TextColor3 = Color3.new(1, 1, 1)
+B.TextSize = 12
+B.TextXAlignment = Enum.TextXAlignment.Center
+
+E.Name = "E"
+E.Parent = Watermark2
+E.BackgroundColor3 = Color3.new(0, 0, 0)
+E.BackgroundTransparency = 1
+E.BorderSizePixel = 0
+E.Position = UDim2.new(0, 106, 0, 0)
+E.Size = UDim2.new(0, 10, 1, 0)
+E.ZIndex = 999999999
+E.Font = Enum.Font.Ubuntu
+E.Text = "E"
+E.TextColor3 = Color3.new(1, 1, 1)
+E.TextSize = 12
+E.TextXAlignment = Enum.TextXAlignment.Center
+
+T.Name = "T"
+T.Parent = Watermark2
+T.BackgroundColor3 = Color3.new(0.00784314, 0.00784314, 0.00784314)
+T.BackgroundTransparency = 1
+T.BorderSizePixel = 0
+T.Position = UDim2.new(0, 116, 0, 0)
+T.Size = UDim2.new(0, 10, 1, 0)
+T.ZIndex = 999999999
+T.Font = Enum.Font.Ubuntu
+T.Text = "T"
+T.TextColor3 = Color3.new(1, 1, 1)
+T.TextSize = 12
+T.TextXAlignment = Enum.TextXAlignment.Center
+
+A.Name = "A"
+A.Parent = Watermark2
+A.BackgroundColor3 = Color3.new(0.00784314, 0.00784314, 0.00784314)
+A.BackgroundTransparency = 1
+A.BorderSizePixel = 0
+A.Position = UDim2.new(0, 126, 0, 0)
+A.Size = UDim2.new(0, 10, 1, 0)
+A.ZIndex = 999999999
+A.Font = Enum.Font.Ubuntu
+A.Text = "A"
+A.TextColor3 = Color3.new(1, 1, 1)
+A.TextSize = 12
+A.TextXAlignment = Enum.TextXAlignment.Center
+
+back1.Name = "back1"
+back1.Parent = Watermark2
+back1.BackgroundColor3 = Color3.new(1, 1, 1)
+back1.BackgroundTransparency = 1
+back1.BorderSizePixel = 0
+back1.Position = UDim2.new(0, 138, 0, 0)
+back1.Size = UDim2.new(0, 12, 1, 0)
+back1.ZIndex = 999999999
+back1.Font = Enum.Font.Code
+back1.Text = "|"
+back1.TextColor3 = Color3.new(1, 1, 1)
+back1.TextSize = 12
+back1.TextXAlignment = Enum.TextXAlignment.Center
+
+FPS.Name = "FPS"
+FPS.Parent = Watermark2
+FPS.BackgroundColor3 = Color3.new(1, 1, 1)
+FPS.BackgroundTransparency = 1
+FPS.BorderSizePixel = 0
+FPS.Position = UDim2.new(0, 152, 0, 0)
+FPS.Size = UDim2.new(0, 50, 1, 0)
+FPS.ZIndex = 999999999
+FPS.Font = Enum.Font.Code
+FPS.Text = "0 fps"
+FPS.TextColor3 = Color3.new(1, 1, 1)
+FPS.TextSize = 12
+FPS.TextXAlignment = Enum.TextXAlignment.Left
+
+local function vrksq_fake_script() 
+    local script = Instance.new('LocalScript', Watermark2)
+    local wm = script.Parent
+    local fpsText = wm:WaitForChild("FPS")
+    local b = wm:WaitForChild("B")
+    local e = wm:WaitForChild("E")
+    local t = wm:WaitForChild("T")
+    local a = wm:WaitForChild("A")
+    local frames = 0
+    local lastTick = tick()
+    local curFPS = 0
+    local function animletters()
+        local tm = tick() * 1.5
+        local colors = {Color3.fromRGB(100, 200, 255), Color3.fromRGB(0, 100, 255), Color3.fromRGB(255, 100, 200), Color3.fromRGB(100, 255, 100)}
+        local wave = (math.sin(tm) + 1) / 2
+        local idx = math.floor(wave * 3) + 1
+        local nextIdx = idx < 4 and idx + 1 or 1
+        local blend = (wave * 3) % 1
+        local col1 = colors[idx]
+        local col2 = colors[nextIdx]
+        local color = Color3.new(col1.R + (col2.R - col1.R) * blend, col1.G + (col2.G - col1.G) * blend, col1.B + (col2.B - col1.B) * blend)
+        b.TextColor3 = color
+        e.TextColor3 = color
+        t.TextColor3 = color
+        a.TextColor3 = color
+    end
+    local function updfps()
+        frames = frames + 1
+        local curTime = tick()
+        if curTime - lastTick >= 0.5 then
+            curFPS = math.floor(frames / (curTime - lastTick))
+            frames = 0
+            lastTick = curTime
+            fpsText.Text = curFPS .. " fps"
         end
     end
-})
+    game:GetService("RunService").RenderStepped:Connect(function() updfps(); animletters() end)
+end
+coroutine.wrap(vrksq_fake_script)()
 
--- Update the dropdown list every second by directly modifying the list
-while true do
-    wait(1)
-    local updatedPlayersList = updatePlayersList()  -- Get the updated list of players
-    local dropdown = Section:FindFirstChild("Dropdown")
-    if dropdown then
-        dropdown.list = updatedPlayersList  -- Update the dropdown list directly
+-- Keybind to Toggle GUI
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    local toggleKey = getgenv().MenuKey or Enum.KeyCode.Insert
+    if not gameProcessed and (input.KeyCode == toggleKey or input.KeyCode == Enum.KeyCode.KeypadTwo) then
+        Window.toggle_menu(not Library.menu_open)
     end
-end
+end)
 
-end
+-- Init
+task.delay(1, function()
+    Window.toggle_menu(true)
+    if Library.init_config then
+        Library:init_config(Window)
+    end
+end)
