@@ -20,15 +20,19 @@ local features = {
     stopAnims = false,
     bootyClap = { following = false, target = nil, loop = nil },
     antiDeath = { enabled = false, originalPos = nil },
-    infJump = false
+    infJump = false,
+    animeTpEnabled = false
 }
+_G.features = features -- Expose globally for convenience if needed
+local Features = features
+
 
 -- Library Initialization
 local Library, Notifications = loadstring(game:HttpGet("https://raw.githubusercontent.com/l1l1l1l1l11l1l1l1l11/Neverlose-Main/refs/heads/main/nssso.luau"))()
 
 -- Window
 local Window = Library:window({
-    name = "femboys.pub",
+    name = "femboys.pub | tsb",
     size = UDim2.new(0, 650, 0, 450)
 })
 
@@ -356,19 +360,153 @@ BlatantChar:Toggle({ name = "Infinite Jump", callback = function(bool) features.
 
 -- TPs
 local tpTarget = "None"
-local tpNames = {"None", "Safe Zone", "Mid", "Void"}
+local tpLocations = {
+    ["Safe Zone"] = CFrame.new(-10, 808, -378),
+    ["Mid"] = CFrame.new(0, 50, 0),
+    ["Void"] = CFrame.new(0, -490, 0),
+    ["Left Mountain"] = Vector3.new(376.96, 699.10, 362.13),
+    ["Right Mountain"] = Vector3.new(236.28, 699.10, 415.91),
+    ["Looking Down"] = Vector3.new(4.35, 652.52, -336.13),
+    ["Middle of the Map"] = Vector3.new(142.37, 440.76, 22.41),
+    ["Gate 1"] = Vector3.new(291.19, 439.51, 375.03),
+    ["Gate 2"] = Vector3.new(10.45, 439.51, -306.24),
+    ["Death Counter Room"] = Vector3.new(-65.18, 29.25, 20347.43),
+    ["Atomic Room"] = Vector3.new(1064.54, 131.29, 23007.78)
+}
+local tpNames = {"None"}
+local sortedNames = {}
+for n, _ in pairs(tpLocations) do table.insert(sortedNames, n) end
+table.sort(sortedNames)
+for _, n in ipairs(sortedNames) do table.insert(tpNames, n) end
+
 BlatantChar:Dropdown({ name = "Select TP Target", items = tpNames, default = "None", callback = function(val) tpTarget = val end })
 BlatantChar:Button({ name = "Teleport Now", callback = function()
     local char = LocalPlayer.Character
     if not char then return end
-    if tpTarget == "Safe Zone" then char.HumanoidRootPart.CFrame = CFrame.new(-10, 808, -378)
-    elseif tpTarget == "Mid" then char.HumanoidRootPart.CFrame = CFrame.new(0, 50, 0)
-    elseif tpTarget == "Void" then char.HumanoidRootPart.CFrame = CFrame.new(0, -490, 0)
-    else 
+    
+    local targetPos = tpLocations[tpTarget]
+    if targetPos then
+        if typeof(targetPos) == "Vector3" then char.HumanoidRootPart.CFrame = CFrame.new(targetPos)
+        else char.HumanoidRootPart.CFrame = targetPos end
+    else
         local tPlayer = Players:FindFirstChild(tpTarget)
         if tPlayer and tPlayer.Character then char.HumanoidRootPart.CFrame = tPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,3) end
     end
 end})
+
+-- TP On Move (Garou)
+local tpMoveTarget = "None"
+local moveTpIds = {["12273188754"]=true, ["12296113986"]=true} 
+BlatantChar:Dropdown({ name = "TP on Garou Move", items = tpNames, default = "None", callback = function(val) tpMoveTarget = val end })
+
+-- Connections
+local charConnections = {}
+
+local function setupCharacter(char)
+    -- Clear old connections
+    for _, c in pairs(charConnections) do c:Disconnect() end
+    table.clear(charConnections)
+
+    local hum = char:WaitForChild("Humanoid", 10)
+    if not hum then return end
+    local anim = hum:WaitForChild("Animator", 10)
+    if not anim then return end
+
+    -- Garou TP Hook
+    local conn1 = anim.AnimationPlayed:Connect(function(t)
+        if not t or not t.Animation then return end
+        local id = t.Animation.AnimationId:match("%d+")
+        if tpMoveTarget ~= "None" and moveTpIds[id] then
+             local dest = tpLocations[tpMoveTarget]
+             if dest then
+                 if typeof(dest) == "Vector3" then char.HumanoidRootPart.CFrame = CFrame.new(dest)
+                 else char.HumanoidRootPart.CFrame = dest end
+             end
+        end
+    end)
+    table.insert(charConnections, conn1)
+    
+    -- Anime TP Hook (Trashcan Aimbot)
+    local conn2 = anim.AnimationPlayed:Connect(function(t)
+        if features.aimbot.animeTp and t.Animation.AnimationId == "rbxassetid://13813955149" then
+             local target = nil
+             if features.aimbot.mode == "closest to player" then
+                 local close, dist = nil, math.huge
+                 for _, p in ipairs(Players:GetPlayers()) do
+                     if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                         local d = (p.Character.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
+                         if d < dist then dist = d; close = p end
+                     end
+                 end
+                 target = close
+             else -- Mouse
+                 local close, dist = nil, math.huge
+                 local mouse = UserInputService:GetMouseLocation()
+                 for _, p in ipairs(Players:GetPlayers()) do
+                     if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                         local v, os = Workspace.CurrentCamera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+                         if os then
+                             local d = (Vector2.new(v.X, v.Y) - mouse).Magnitude
+                             if d < dist then dist = d; close = p end
+                         end
+                     end
+                 end
+                 target = close
+             end
+             
+             if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                 local tHrp = target.Character.HumanoidRootPart
+                 local origin = tHrp.Position
+                 local radius = 5
+                 local angle = math.rad(math.random(0,360))
+                 local offset = Vector3.new(math.cos(angle)*radius, 0, math.sin(angle)*radius)
+                 
+                 local oldCF = char.HumanoidRootPart.CFrame
+                 -- Teleport
+                 char.HumanoidRootPart.CFrame = CFrame.lookAt(origin + offset, origin)
+                 
+                 -- Look at loop (short)
+                 local laLoop; laLoop = RunService.Heartbeat:Connect(function()
+                     if char.Parent and tHrp.Parent then char.HumanoidRootPart.CFrame = CFrame.lookAt(char.HumanoidRootPart.Position, tHrp.Position) else laLoop:Disconnect() end
+                 end)
+                 
+                 t.Stopped:Wait()
+                 laLoop:Disconnect()
+                 task.wait(0.5)
+                 char.HumanoidRootPart.CFrame = oldCF
+             end
+        end
+    end)
+    table.insert(charConnections, conn2)
+end
+
+LocalPlayer.CharacterAdded:Connect(setupCharacter)
+if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
+
+-- Anime TP (Keybind T with Animation)
+Features.animeTpEnabled = false
+BlatantChar:Toggle({ name = "Anime TP (Key T)", callback = function(bool) Features.animeTpEnabled = bool end })
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if Features.animeTpEnabled and input.KeyCode == Enum.KeyCode.T then
+        local char = LocalPlayer.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local hum = char:FindFirstChild("Humanoid")
+            local mouse = LocalPlayer:GetMouse()
+            if hrp and hum and mouse then
+                local pos = mouse.Hit.Position + Vector3.new(0, 2.5, 0)
+                hrp.CFrame = CFrame.new(pos)
+                -- Play Animation
+                local anim = Instance.new("Animation")
+                anim.AnimationId = "rbxassetid://15957361339"
+                local track = hum.Animator:LoadAnimation(anim)
+                track:Play()
+            end
+        end
+    end
+end)
 BlatantChar:Button({ name = "Give Click TP Tool", callback = function()
     local mouse = LocalPlayer:GetMouse()
     local tool = Instance.new("Tool"); tool.RequiresHandle = false; tool.Name = "Click TP"
@@ -458,7 +596,7 @@ RunService.Stepped:Connect(function()
         end
     end
     -- No Anim: Hook
-    if features.stopAnims and LocalPlayer.Character then
+    if features.stopAnims and LocalPlayer.Character and not getgenv().instaKillActive then
         local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
         if hum then
              for _, t in pairs(hum:GetPlayingAnimationTracks()) do t:Stop() end
@@ -575,9 +713,17 @@ MiscRight:Dropdown({ name = "Emote Follow", items = playerNames, default = "None
          local anim = Instance.new("Animation"); anim.AnimationId = "rbxassetid://120789866363939"
          local track = LocalPlayer.Character.Humanoid.Animator:LoadAnimation(anim); track:Play()
          features.bootyClap.loop = RunService.Heartbeat:Connect(function()
-             if not features.bootyClap.following or not features.bootyClap.target then track:Stop(); if features.bootyClap.loop then features.bootyClap.loop:Disconnect(); features.bootyClap.loop = nil end return end
+             if not features.bootyClap.following or not features.bootyClap.target then 
+                 track:Stop(); 
+                 if features.bootyClap.loop then features.bootyClap.loop:Disconnect(); features.bootyClap.loop = nil end 
+                 return 
+             end
              local tChar = features.bootyClap.target.Character
-             if tChar and tChar:FindFirstChild("HumanoidRootPart") then LocalPlayer.Character.HumanoidRootPart.CFrame = tChar.HumanoidRootPart.CFrame * CFrame.new(0,0,3) end
+             if tChar and tChar:FindFirstChild("HumanoidRootPart") then 
+                 -- Oscillate forward/backward (Z axis relative to target)
+                 local offset = 3 + math.sin(tick() * 5) * 2 -- Base 3, +/- 2 (Ranges 1 to 5)
+                 LocalPlayer.Character.HumanoidRootPart.CFrame = tChar.HumanoidRootPart.CFrame * CFrame.new(0, 0, offset) 
+             end
          end)
     end
 end })
@@ -773,5 +919,25 @@ task.delay(1, function()
     Window.toggle_menu(true)
     if Library.init_config then
         Library:init_config(Window)
+    end
+end)
+
+-- Ping Monitor
+local lastPingWarning = 0
+task.spawn(function()
+    while true do
+        local stats = game:GetService("Stats")
+        local ping = stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+        if ping > 100 then
+            if tick() - lastPingWarning > 60 then -- 1 minute cooldown to avoid spam
+                lastPingWarning = tick()
+                Notifications:Notification({
+                    title = "Ping Warning",
+                    body = "your ping is a little high, teleporting players might not work due to game limitations",
+                    duration = 10
+                })
+            end
+        end
+        task.wait(10)
     end
 end)
