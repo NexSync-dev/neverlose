@@ -144,7 +144,7 @@ local notifications = library.notifications
 if isfile(library.directory .. "/fonts/main.ttf") then 
     delfile(library.directory .. "/fonts/main.ttf")
 else 
-    writefile(library.directory .. "/fonts/main.ttf", game:HttpGet("https://github.com/f1nobe7650/Nebula/raw/refs/heads/main/Minecraftia-Regular.ttf"))
+    writefile(library.directory .. "/fonts/main.ttf", game:HttpGet("https://github.com/NexSync-dev/neverlose/blob/main/Minecraftia-Regular.ttf"))
 end 
 
 local minecraftia = {
