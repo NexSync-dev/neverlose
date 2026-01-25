@@ -24,6 +24,7 @@ local function notify(title, body, col)
     end)
 end
 
+loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/sigmea"))()
 
 -- Global State
 local features = {
@@ -32,7 +33,7 @@ local features = {
     esp = { 
         enabled = false, boxEnabled = false, boxColor = Color3.new(1,0,0), 
         healthEnabled = false, tracersEnabled = false, skeletonEnabled = false, 
-        chamsEnabled = false, infoEnabled = false, rainbow = false, distanceScale = false
+        chamsEnabled = false, infoEnabled = false, rainbow = false, distanceScale = false, nametags = false
     },
     lighting = { enabled = false, color = Color3.fromRGB(255, 182, 193), fullBright = false, noFog = false },
     performance = { fpsBooster = false, pingBooster = false },
@@ -121,7 +122,7 @@ end)
 
 
 -- Library Initialization
-local Library, notifications = loadstring(game:HttpGet("https://raw.githubusercontent.com/l1l1l1l1l11l1l1l1l11/Neverlose-Main/refs/heads/main/nssso.luau"))()
+local Library, notifications = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/lib.lua"))()
 
 -- Window
 local Window = Library:window({
@@ -378,12 +379,28 @@ RunService.RenderStepped:Connect(function()
                       end
                   end
                   
-                  -- Name/Dist (Info) - ALWAYS UPDATE if Enabled, independent of Box
-                  if features.esp.infoEnabled then -- Now checks flag
-                      cache.name.Visible = true; cache.name.Text = p.Name; cache.name.Position = Vector2.new(vec.X, headPos.Y - 18); cache.name.Color = mainColor
-                      cache.dist.Visible = true; cache.dist.Text = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude) .. "m"; cache.dist.Position = Vector2.new(vec.X, vec.Y + height/2 + 2); cache.dist.Color = mainColor
+                  -- Nametags
+                  if features.esp.nametags then
+                      cache.name.Visible = true
+                      cache.name.Text = p.Name
+                      cache.name.Position = Vector2.new(vec.X, headPos.Y - 20)
+                      cache.name.Color = mainColor
+                      cache.name.Size = 16
+                      cache.name.Outline = true
                   else
-                      cache.name.Visible = false; cache.dist.Visible = false
+                      cache.name.Visible = false
+                  end
+
+                  -- Info (Dist/Class)
+                  if features.esp.infoEnabled then
+                      local distStr = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude) .. "m"
+                      local classStr = getTSBClass(p)
+                      cache.dist.Visible = true
+                      cache.dist.Text = distStr .. " | " .. classStr
+                      cache.dist.Position = Vector2.new(vec.X, vec.Y + height/2 + 5)
+                      cache.dist.Color = Color3.new(1,1,1)
+                  else
+                      cache.dist.Visible = false
                   end
                   
                   -- Health
@@ -457,7 +474,8 @@ Players.PlayerRemoving:Connect(removeEsp)
 local masterToggle = EspSection:Toggle({ name = "ESP Enabled", callback = function(bool) features.esp.enabled = bool; if not bool then for p,_ in pairs(espCache) do removeEsp(p) end end end })
 masterToggle:Toggle({ name = "Show TSB Class", callback = function(bool) espConfig.tsbClass = bool end })
 masterToggle:Toggle({ name = "Death Counter Highlight", callback = function(bool) espConfig.deathCounter = bool end })
-masterToggle:Toggle({ name = "Show Info (Name/Dist)", callback = function(bool) features.esp.infoEnabled = bool end })
+masterToggle:Toggle({ name = "Show Info (Dist/Class)", callback = function(bool) features.esp.infoEnabled = bool end })
+masterToggle:Toggle({ name = "Nametags", callback = function(bool) features.esp.nametags = bool end })
 masterToggle:Toggle({ name = "Rainbow ESP", callback = function(bool) features.esp.rainbow = bool end })
 
 local boxToggle = EspSection:Toggle({ name = "Boxes", Name = "Boxes", callback = function(bool) features.esp.boxEnabled = bool end })
