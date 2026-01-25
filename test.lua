@@ -921,5 +921,4 @@ task.delay(1, function()
     if Library.init_config then
         Library:init_config(Window)
     end
-    _G.ScriptLoaded = true
 end)
