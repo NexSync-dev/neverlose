@@ -141,11 +141,17 @@ local config_flags = library.config_flags
 local notifications = library.notifications 
 
 -- Font importing system 
-if isfile(library.directory .. "/fonts/main.ttf") then 
-    delfile(library.directory .. "/fonts/main.ttf")
-else 
-    writefile(library.directory .. "/fonts/main.ttf", game:HttpGet("https://github.com/NexSync-dev/neverlose/blob/main/Minecraftia-Regular.ttf"))
+local fontPath = library.directory .. "/fonts/main.ttf"
+if not isfile(fontPath) then 
+    pcall(function()
+        writefile(fontPath, game:HttpGet("https://github.com/NexSync-dev/neverlose/blob/main/Minecraftia-Regular.ttf?raw=true"))
+    end)
 end 
+
+local function getAsset(path)
+    local success, asset = pcall(function() return getcustomasset(path) end)
+    return success and asset or ""
+end
 
 local minecraftia = {
     name = "Minecraftia",
@@ -154,7 +160,7 @@ local minecraftia = {
             name = "Regular",
             weight = 400,
             style = "normal",
-            assetId = getcustomasset(library.directory .. "/fonts/main.ttf")
+            assetId = getAsset(library.directory .. "/fonts/main.ttf")
         }
     }
 }
@@ -163,7 +169,12 @@ if not isfile(library.directory .. "/fonts/main_encoded.ttf") then
     writefile(library.directory .. "/fonts/main_encoded.ttf", http_service:JSONEncode(minecraftia))
 end 
 
-library.font = Font.new(getcustomasset(library.directory .. "/fonts/main_encoded.ttf"), Enum.FontWeight.Regular)
+local encodedAsset = getAsset(library.directory .. "/fonts/main_encoded.ttf")
+if encodedAsset ~= "" then
+    library.font = Font.new(encodedAsset, Enum.FontWeight.Regular)
+else
+    library.font = Font.fromEnum(Enum.Font.Code) -- Fallback
+end
 -- 
 
 -- Library functions 
@@ -343,8 +354,12 @@ function library:convert_enum(enum)
 
     local enum_table = Enum
     for i = 2, #enum_parts do
-        local enum_item = enum_table[enum_parts[i]]
-
+        local part = enum_parts[i]
+        -- Handle case sensitivity for common enums
+        if part:lower() == "keycode" then part = "KeyCode" end
+        if part:lower() == "userinputtype" then part = "UserInputType" end
+        
+        local enum_item = enum_table[part]
         enum_table = enum_item
     end
 
