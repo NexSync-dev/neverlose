@@ -11,20 +11,77 @@ local LocalPlayer = Players.LocalPlayer
 -- Global State
 local features = {
     autoBlock = { enabled = false, range = 10, bubble = nil, looking = false },
-    aimbot = { mode = "closest to player", trackConnection = nil },
-    esp = { enabled = false, boxEnabled = false, boxColor = Color3.new(1,0,0), healthEnabled = false, tracersEnabled = false, skeletonEnabled = false, chamsEnabled = false },
-    lighting = { enabled = false, color = Color3.fromRGB(255, 182, 193) },
-    noStun = false,
+    aimbot = { mode = "closest to player", trackConnection = nil, animeTp = false, shiftlockFix = true },
+    esp = { 
+        enabled = false, boxEnabled = false, boxColor = Color3.new(1,0,0), 
+        healthEnabled = false, tracersEnabled = false, skeletonEnabled = false, 
+        chamsEnabled = false, infoEnabled = false, rainbow = false, distanceScale = false
+    },
+    lighting = { enabled = false, color = Color3.fromRGB(255, 182, 193), fullBright = false, noFog = false },
+    performance = { fpsBooster = false, pingBooster = false },
+    noStun = { enabled = false, highUNC = false },
     antiFling = { enabled = false },
     antiVoid = { enabled = false, platform = nil },
     stopAnims = false,
     bootyClap = { following = false, target = nil, loop = nil },
     antiDeath = { enabled = false, originalPos = nil },
     infJump = false,
-    animeTpEnabled = false
+    animeTpEnabled = false,
+    gimmicks = { upsideDown = false, headless = false, korblox = false, spinbot = false, spinSpeed = 50, orbit = false, chatSpam = false },
+    world = { gravity = 196.2, fov = 70, disableShake = false }
 }
-_G.features = features -- Expose globally for convenience if needed
+
 local Features = features
+_G.TSB_Features = features
+_G.ScriptLoaded = false
+
+-- Advanced NoStun Logic (High UNC)
+task.spawn(function()
+    local success, mt = pcall(function() return getrawmetatable(game) end)
+    if success then
+        setreadonly(mt, false)
+        local oldIndex = mt.__newindex
+        mt.__newindex = function(self, key, value)
+            if features.noStun.enabled and features.noStun.highUNC and (key == "Stunned" or key == "LightStunned" or key == "StunSubject" or key == "DashLock" or key == "Busy" or key == "BusySubject" or key == "StunWalkSpeed") then
+                return
+            end
+            return oldIndex(self, key, value)
+        end
+    end
+end)
+
+-- NoStun Attribute Loop
+task.spawn(function()
+    while task.wait(0.1) do
+        if features.noStun.enabled then
+            local char = LocalPlayer.Character
+            if char then
+                char:SetAttribute("Stunned", false)
+                char:SetAttribute("LightStunned", false)
+                char:SetAttribute("DashLock", false)
+                char:SetAttribute("Busy", false)
+                char:SetAttribute("BusySubject", "")
+                char:SetAttribute("StunWalkSpeed", 24)
+                char:SetAttribute("CanEvasive", true)
+                char:SetAttribute("StunJumpPower", 50)
+            end
+        end
+    end
+end)
+
+-- Permanent Camera Stabilizer
+RunService:BindToRenderStep("PermanentStabilizer", Enum.RenderPriority.Camera.Value + 1, function()
+    if not features.world.disableShake then return end
+    local camera = Workspace.CurrentCamera
+    if not camera then return end
+    
+    camera.FieldOfView = features.world.fov or 70
+    local cf = camera.CFrame
+    local x, y, _ = cf:ToEulerAnglesYXZ()
+    camera.CFrame = CFrame.new(cf.Position) * CFrame.fromEulerAnglesYXZ(x, y, 0)
+end)
+
+
 
 
 -- Library Initialization
@@ -36,13 +93,33 @@ local Window = Library:window({
     size = UDim2.new(0, 650, 0, 450)
 })
 
--- ====================
+
 -- TAB: DEFINITIONS
 -- ====================
-local LegitTab = Window:Tab({ name = "Legit" })
-local BlatantTab = Window:Tab({ name = "Blatant" })
-local VisualsTab = Window:Tab({ name = "Visuals" })
-local MiscTab = Window:Tab({ name = "Misc" })
+local LegitTab = Window:Tab({ name = "Legit", Name = "Legit", text = "Legit" })
+local BlatantTab = Window:Tab({ name = "Blatant", Name = "Blatant", text = "Blatant" })
+local VisualsTab = Window:Tab({ name = "Visuals", Name = "Visuals", text = "Visuals" })
+local MiscTab = Window:Tab({ name = "Misc", Name = "Misc", text = "Misc" })
+local SettingsTab = Window:Tab({ name = "Settings", Name = "Settings", text = "Settings" }) 
+
+-- Shareable Lists and Dynamic Refresh
+local playerNames = {"None"}
+local mapNames = {"None"}
+local dropdownsToUpdate = {}
+
+local function updatePlayerList()
+    local newList = {"None"}
+    for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then table.insert(newList, p.Name) end end
+    playerNames = newList
+    for _, d in ipairs(dropdownsToUpdate) do pcall(function() d.refresh_options(playerNames) end) end
+end
+
+Players.PlayerAdded:Connect(function() task.wait(1); updatePlayerList() end)
+Players.PlayerRemoving:Connect(function() task.wait(1); updatePlayerList() end)
+updatePlayerList()
+
+
+
 
 -- ====================
 -- TAB: LEGIT
@@ -50,8 +127,10 @@ local MiscTab = Window:Tab({ name = "Misc" })
 local LegitMain = LegitTab:Section({ name = "Main", side = "left" })
 local LegitExtra = LegitTab:Section({ name = "Extra", side = "right" })
 
--- Soft Aim Lock
-RunService.BindToRenderStep(RunService, "SoftAim", Enum.RenderPriority.Camera.Value + 1, function()
+
+-- Soft Aim Lock High-Priority Loop
+local softAimConn = nil
+local function updateSoftAim()
     if not features.autoBlock.enabled then return end
     local char = LocalPlayer.Character
     if not char then return end
@@ -68,18 +147,36 @@ RunService.BindToRenderStep(RunService, "SoftAim", Enum.RenderPriority.Camera.Va
     if closestTarget then
         local dir = (closestTarget.Position - hrp.Position).Unit
         local lookCf = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
-        hrp.CFrame = lookCf
+        if features.aimbot.shiftlockFix then
+            hrp.CFrame = hrp.CFrame:Lerp(lookCf, 0.45) -- Faster, smoother tracking
+        else
+            hrp.CFrame = lookCf
+        end
     end
-end)
-LegitMain:Toggle({ name = "Soft Aim Lock", callback = function(bool) features.autoBlock.enabled = bool end })
-LegitMain:Slider({ name = "Range", min = 10, max = 100, default = 10, suffix = " studs", callback = function(val) features.autoBlock.range = val end })
-LegitExtra:Button({ name = "M1 reset script(keybind c)", callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlosegui/refs/heads/main/m1reset.lua"))() end })
+
+end
+
+LegitMain:Toggle({ name = "Soft Aim Lock", Name = "Soft Aim Lock", callback = function(bool) features.autoBlock.enabled = bool end })
+LegitMain:Toggle({ name = "Shiftlock Smooth Fix", Name = "Shiftlock Smooth Fix", callback = function(bool) features.aimbot.shiftlockFix = bool end })
+
+local rangeSlider = LegitMain:Slider({ name = "Range", Name = "Range", text = "Range", min = 10, max = 100, default = 10, suffix = " studs", callback = function(val) features.autoBlock.range = val end })
+if rangeSlider.items and rangeSlider.items.name then rangeSlider.items.name.set("Range") end
+
+LegitExtra:Button({ name = "M1 reset script(keybind c)", Name = "M1 reset script(keybind c)", text = "M1 reset script(keybind c)", callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlosegui/refs/heads/main/m1reset.lua"))() end })
+
+
+
+
+
+
 
 -- ====================
 -- TAB: VISUALS
 -- ====================
 local EspSection = VisualsTab:Section({ name = "ESP Configuration", side = "left" })
 local WorldSection = VisualsTab:Section({ name = "World Settings", side = "right" })
+
+
 
 -- Variables
 local espConfig = {
@@ -181,11 +278,13 @@ RunService.RenderStepped:Connect(function()
                   local height = legPos.Y - headPos.Y
                   local width = height / 2
                   
-                  local mainColor = Color3.new(1,1,1)
+                  local mainColor = features.esp.rainbow and Color3.fromHSV(tick() % 5 / 5, 1, 1) or features.esp.boxColor
                   if espConfig.deathCounter then
                       local hasDC = (p.Backpack and p.Backpack:FindFirstChild("Death Counter")) or (char and char:FindFirstChild("Death Counter"))
                       if hasDC then mainColor = Color3.fromRGB(255, 0, 0); dcCache[p]=0 elseif dcCache[p] and dcCache[p]>tick() then mainColor = Color3.fromRGB(255, 255, 0) else if dcCache[p]==0 then dcCache[p]=tick()+10 end end
                   end
+
+
                   
                   -- Box Styles
                   cache.box.Visible = false; cache.filledBox.Visible = false; for _,l in pairs(cache.corners) do l.Visible = false end
@@ -268,21 +367,28 @@ Players.PlayerRemoving:Connect(removeEsp)
 local masterToggle = EspSection:Toggle({ name = "ESP Enabled", callback = function(bool) features.esp.enabled = bool; if not bool then for p,_ in pairs(espCache) do removeEsp(p) end end end })
 masterToggle:Toggle({ name = "Show TSB Class", callback = function(bool) espConfig.tsbClass = bool end })
 masterToggle:Toggle({ name = "Death Counter Highlight", callback = function(bool) espConfig.deathCounter = bool end })
-masterToggle:Toggle({ name = "Show Info (Name/Dist)", callback = function(bool) features.esp.infoEnabled = bool end }) -- NEW BUTTON
+masterToggle:Toggle({ name = "Show Info (Name/Dist)", callback = function(bool) features.esp.infoEnabled = bool end })
+masterToggle:Toggle({ name = "Rainbow ESP", callback = function(bool) features.esp.rainbow = bool end })
 
-local boxToggle = EspSection:Toggle({ name = "Boxes", callback = function(bool) features.esp.boxEnabled = bool end })
-boxToggle:Dropdown({ name = "Style", items = {"Full", "Filled", "Corner"}, default = "Corner", callback = function(val) espConfig.boxStyle = val end })
-boxToggle:Colorpicker({ name = "Color", default = Color3.new(1,0,0), callback = function(col) features.esp.boxColor = col end })
-boxToggle:Slider({ name = "Fill Transparency", min = 0, max = 1, default = 0.5, callback = function(val) espConfig.fillTransparency = val end })
+local boxToggle = EspSection:Toggle({ name = "Boxes", Name = "Boxes", callback = function(bool) features.esp.boxEnabled = bool end })
+boxToggle:Dropdown({ name = "Style", Name = "Style", text = "Style", items = {"Full", "Filled", "Corner"}, default = "Corner", callback = function(val) espConfig.boxStyle = val end })
+boxToggle:Colorpicker({ name = "Color", Name = "Color", default = Color3.new(1,0,0), callback = function(col) features.esp.boxColor = col end })
+local fillSlider = boxToggle:Slider({ name = "Fill Transparency", Name = "Fill Transparency", text = "Fill Transparency", min = 0, max = 100, default = 50, suffix = "%", callback = function(val) espConfig.fillTransparency = val/100 end })
+if fillSlider.items and fillSlider.items.name then fillSlider.items.name.set("Fill Transparency") end
 
-local healthToggle = EspSection:Toggle({ name = "Health", callback = function(bool) features.esp.healthEnabled = bool end })
-healthToggle:Dropdown({ name = "Style", items = {"Bar", "Text", "Both"}, default = "Bar", callback = function(val) espConfig.healthStyle = val end })
+local healthToggle = EspSection:Toggle({ name = "Health", Name = "Health", callback = function(bool) features.esp.healthEnabled = bool end })
+healthToggle:Dropdown({ name = "Style", Name = "Style", text = "Style", items = {"Bar", "Text", "Both"}, default = "Bar", callback = function(val) espConfig.healthStyle = val end })
 
-local tracerToggle = EspSection:Toggle({ name = "Tracers", callback = function(bool) features.esp.tracersEnabled = bool end })
-tracerToggle:Dropdown({ name = "Origin", items = {"Bottom", "Center", "Mouse"}, default = "Bottom", callback = function(val) espConfig.tracerOrigin = val end })
+local tracerToggle = EspSection:Toggle({ name = "Tracers", Name = "Tracers", callback = function(bool) features.esp.tracersEnabled = bool end })
+tracerToggle:Dropdown({ name = "Origin", Name = "Origin", text = "Origin", items = {"Bottom", "Center", "Mouse"}, default = "Bottom", callback = function(val) espConfig.tracerOrigin = val end })
 
-EspSection:Toggle({ name = "Skeleton", callback = function(bool) features.esp.skeletonEnabled = bool end })
-EspSection:Toggle({ name = "Chams", callback = function(bool) features.esp.chamsEnabled = bool end })
+EspSection:Toggle({ name = "Skeleton", Name = "Skeleton", callback = function(bool) features.esp.skeletonEnabled = bool end })
+EspSection:Toggle({ name = "Chams", Name = "Chams", callback = function(bool) features.esp.chamsEnabled = bool end })
+
+
+
+
+
 
 -- World UI
 local cc = Lighting:FindFirstChild("TSB_CC") or Instance.new("ColorCorrectionEffect", Lighting); cc.Name = "TSB_CC"; cc.Enabled = false
@@ -290,13 +396,35 @@ local blur = Lighting:FindFirstChild("TSB_Blur") or Instance.new("BlurEffect", L
 
 local function uiToggleWorld(bool) if bool then cc.Enabled=true else cc.Enabled=false; blur.Enabled=false end end -- Helper
 
-local worldToggle = WorldSection:Toggle({ name = "World Modifications", callback = function(bool) features.lighting.enabled = bool; uiToggleWorld(bool) end }) 
-worldToggle:Colorpicker({ name = "Fog Color", default = Color3.new(0.5,0.5,0.5), callback = function(col) Lighting.FogColor = col end })
-worldToggle:Slider({ name = "Time", min=0, max=24, default=14, callback = function(val) Lighting.TimeOfDay = tostring(val)..":00:00" end })
-worldToggle:Slider({ name = "Brightness", min=0, max=10, default=2, callback = function(val) Lighting.Brightness = val end })
-worldToggle:Slider({ name = "Saturation", min=0, max=2, default=1, callback = function(val) cc.Saturation = val end })
-worldToggle:Slider({ name = "Contrast", min=0, max=2, default=1, callback = function(val) cc.Contrast = val end })
-worldToggle:Slider({ name = "Blur Size", min=0, max=30, default=0, callback = function(val) blur.Size = val; blur.Enabled = (val > 0) end })
+local worldToggle = WorldSection:Toggle({ name = "World Modifications", Name = "World Modifications", text = "World Modifications", callback = function(bool) features.lighting.enabled = bool; uiToggleWorld(bool) end }) 
+worldToggle:Colorpicker({ name = "Fog Color", Name = "Fog Color", text = "Fog Color", default = Color3.new(0.5,0.5,0.5), callback = function(col) Lighting.FogColor = col end })
+local timeS = worldToggle:Slider({ name = "Time", Name = "Time", text = "Time", min=0, max=24, default=14, suffix = "h", callback = function(val) Lighting.TimeOfDay = tostring(val)..":00:00" end })
+local brightS = worldToggle:Slider({ name = "Brightness", Name = "Brightness", text = "Brightness", min=0, max=10, default=2, suffix = " lux", callback = function(val) Lighting.Brightness = val end })
+local satS = worldToggle:Slider({ name = "Saturation", Name = "Saturation", text = "Saturation", min=0, max=2, default=1, suffix = "x", callback = function(val) cc.Saturation = val end })
+local contS = worldToggle:Slider({ name = "Contrast", Name = "Contrast", text = "Contrast", min=0, max=2, default=1, suffix = "x", callback = function(val) cc.Contrast = val end })
+local blurS = worldToggle:Slider({ name = "Blur Size", Name = "Blur Size", text = "Blur Size", min=0, max=30, default = 0, suffix = "px", callback = function(val) blur.Size = val; blur.Enabled = (val > 0) end })
+
+for _, s in pairs({timeS, brightS, satS, contS, blurS}) do if s.items and s.items.name then s.items.name.set(s.name or s.text) end end
+
+
+WorldSection:Toggle({ name = "FullBright", Name = "FullBright", text = "FullBright", callback = function(bool) features.lighting.fullBright = bool end })
+WorldSection:Toggle({ name = "No Fog", Name = "No Fog", text = "No Fog", callback = function(bool) features.lighting.noFog = bool end })
+
+
+
+
+RunService.RenderStepped:Connect(function()
+    if features.lighting.fullBright then
+        Lighting.Ambient = Color3.new(1, 1, 1)
+        Lighting.ColorShift_Bottom = Color3.new(1, 1, 1)
+        Lighting.ColorShift_Top = Color3.new(1, 1, 1)
+    end
+    if features.lighting.noFog then
+        Lighting.FogEnd = 999999
+        Lighting.FogStart = 999999
+    end
+end)
+
 
 
 -- ====================
@@ -305,9 +433,12 @@ worldToggle:Slider({ name = "Blur Size", min=0, max=30, default=0, callback = fu
 local BlatantCombat = BlatantTab:Section({ name = "Combat", side = "left" })
 local BlatantChar = BlatantTab:Section({ name = "Character & TP", side = "right" })
 
-BlatantCombat:Dropdown({ name = "Target Mode", items = {"closest to player", "closest to mouse"}, default = "closest to player", callback = function(val) features.aimbot.mode = val end })
+
+
+BlatantCombat:Dropdown({ name = "Target Mode", Name = "Target Mode", text = "Target Mode", items = {"closest to player", "closest to mouse"}, default = "closest to player", callback = function(val) features.aimbot.mode = val end })
+
 BlatantCombat:Toggle({
-    name = "Garou Insta Kill",
+    name = "Garou Insta Kill", Name = "Garou Insta Kill", text = "Garou Insta Kill",
     callback = function(bool)
          getgenv().instaKillActive = bool 
          if bool then
@@ -349,16 +480,29 @@ BlatantCombat:Toggle({
         end
     end
 })
-BlatantCombat:Button({ name = "Fling All (External)", callback = function() loadstring(game:HttpGet("https://pastebin.com/raw/zqyDSUWX"))() end })
+BlatantCombat:Button({ name = "Fling All (External)", Name = "Fling All (External)", text = "Fling All (External)", callback = function() loadstring(game:HttpGet("https://pastebin.com/raw/zqyDSUWX"))() end })
 
-BlatantChar:Toggle({ name = "No Stun", callback = function(bool) features.noStun = bool end })
-BlatantChar:Toggle({ name = "Anti Fling", callback = function(bool) features.antiFling.enabled = bool end })
-BlatantChar:Toggle({ name = "Anti Death", callback = function(bool) features.antiDeath.enabled = bool end })
-BlatantChar:Toggle({ name = "No Animations", callback = function(bool) features.stopAnims = bool end })
-BlatantChar:Toggle({ name = "Noclip", callback = function(bool) features.noclip = bool end })
-BlatantChar:Toggle({ name = "Infinite Jump", callback = function(bool) features.infJump = bool end })
+BlatantChar:Toggle({ name = "No Stun", Name = "No Stun", text = "No Stun", callback = function(bool) features.noStun.enabled = bool end })
+BlatantChar:Toggle({ name = "Advanced Engine Stun Block", Name = "Advanced Engine Stun Block", text = "Advanced Engine Stun Block", callback = function(bool) features.noStun.highUNC = bool end })
+BlatantChar:Toggle({ name = "Anti Fling", Name = "Anti Fling", text = "Anti Fling", callback = function(bool) features.antiFling.enabled = bool end })
 
--- TPs
+BlatantChar:Toggle({ name = "Anti Death", Name = "Anti Death", text = "Anti Death", callback = function(bool) features.antiDeath.enabled = bool end })
+BlatantChar:Toggle({ name = "No Animations", Name = "No Animations", text = "No Animations", callback = function(bool) features.stopAnims = bool end })
+BlatantChar:Toggle({ name = "Noclip", Name = "Noclip", text = "Noclip", callback = function(bool) features.noclip = bool end })
+BlatantChar:Toggle({ name = "Infinite Jump", Name = "Infinite Jump", text = "Infinite Jump", callback = function(bool) features.infJump = bool end })
+BlatantChar:Toggle({ name = "Spinbot", Name = "Spinbot", text = "Spinbot", callback = function(bool) features.gimmicks.spinbot = bool end })
+local spinS = BlatantChar:Slider({ name = "Spinbot Speed", Name = "Spinbot Speed", text = "Spinbot Speed", min = 1, max = 100, default = 50, suffix = " rpm", callback = function(val) features.gimmicks.spinSpeed = val end })
+if spinS.items and spinS.items.name then spinS.items.name.set("Spinbot Speed") end
+
+BlatantChar:Toggle({ name = "Upside Down", Name = "Upside Down", text = "Upside Down", callback = function(bool)
+    features.gimmicks.upsideDown = bool
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChildOfClass("Humanoid") then
+        char:FindFirstChildOfClass("Humanoid").HipHeight = bool and 2 or 0
+    end
+end })
+
+-- Map TPs ONLY (No Players)
 local tpTarget = "None"
 local tpLocations = {
     ["Safe Zone"] = CFrame.new(-10, 808, -378),
@@ -373,17 +517,19 @@ local tpLocations = {
     ["Death Counter Room"] = Vector3.new(-65.18, 29.25, 20347.43),
     ["Atomic Room"] = Vector3.new(1064.54, 131.29, 23007.78)
 }
-local tpNames = {"None"}
-local sortedNames = {}
-for n, _ in pairs(tpLocations) do table.insert(sortedNames, n) end
-table.sort(sortedNames)
-for _, n in ipairs(sortedNames) do table.insert(tpNames, n) end
+local sortedM = {}
+for n, _ in pairs(tpLocations) do table.insert(sortedM, n) end
+table.sort(sortedM)
+mapNames = {"None"}
+for _, n in ipairs(sortedM) do table.insert(mapNames, n) end
 
-BlatantChar:Dropdown({ name = "Select TP Target", items = tpNames, default = "None", callback = function(val) tpTarget = val end })
-BlatantChar:Button({ name = "Teleport Now", callback = function()
+BlatantChar:Dropdown({ name = "Map TP", Name = "Map TP", text = "Map TP", items = mapNames, default = "None", callback = function(val) tpTarget = val end })
+local pTP = BlatantChar:Dropdown({ name = "Player TP", Name = "Player TP", text = "Player TP", items = playerNames, default = "None", callback = function(val) tpTarget = val end })
+table.insert(dropdownsToUpdate, pTP)
+
+BlatantChar:Button({ name = "Teleport Now", Name = "Teleport Now", text = "Teleport Now", callback = function()
     local char = LocalPlayer.Character
     if not char then return end
-    
     local targetPos = tpLocations[tpTarget]
     if targetPos then
         if typeof(targetPos) == "Vector3" then char.HumanoidRootPart.CFrame = CFrame.new(targetPos)
@@ -394,10 +540,14 @@ BlatantChar:Button({ name = "Teleport Now", callback = function()
     end
 end})
 
--- TP On Move (Garou)
 local tpMoveTarget = "None"
 local moveTpIds = {["12273188754"]=true, ["12296113986"]=true} 
-BlatantChar:Dropdown({ name = "TP on Garou Move", items = tpNames, default = "None", callback = function(val) tpMoveTarget = val end })
+BlatantChar:Dropdown({ name = "TP on Garou Move", Name = "TP on Garou Move", text = "TP on Garou Move", items = mapNames, default = "None", callback = function(val) tpMoveTarget = val end })
+
+
+
+
+
 
 -- Connections
 local charConnections = {}
@@ -485,7 +635,9 @@ if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
 
 -- Anime TP (Keybind T with Animation)
 Features.animeTpEnabled = false
-BlatantChar:Toggle({ name = "Anime TP (Key T)", callback = function(bool) Features.animeTpEnabled = bool end })
+BlatantChar:Toggle({ name = "Anime TP (Keybind T)", Name = "Anime TP (Keybind T)", text = "Anime TP (Keybind T)", callback = function(bool) Features.animeTpEnabled = bool end })
+
+
 
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
@@ -507,15 +659,21 @@ UserInputService.InputBegan:Connect(function(input, gp)
         end
     end
 end)
-BlatantChar:Button({ name = "Give Click TP Tool", callback = function()
+
+BlatantChar:Button({ name = "Give Click TP Tool", Name = "Give Click TP Tool", text = "Give Click TP Tool", callback = function()
     local mouse = LocalPlayer:GetMouse()
     local tool = Instance.new("Tool"); tool.RequiresHandle = false; tool.Name = "Click TP"
     tool.Activated:Connect(function()
         local pos = mouse.Hit.Position + Vector3.new(0, 2.5, 0)
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pos.X, pos.Y, pos.Z) end
     end)
+    if tool.items and tool.items.name then tool.items.name.set("Give Click TP Tool") end
     tool.Parent = LocalPlayer.Backpack
 end })
+
+
+
+
 
 -- Flight Logic (LinearVelocity)
 local flySpeed = 1
@@ -578,7 +736,11 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 -- Aggressive Loops
+local lastOrbitRandom = nil
+local lastOrbitTick = 0
+
 RunService.Stepped:Connect(function()
+
     -- No Stun: Clear Attributes AND Children
     if features.noStun and LocalPlayer.Character then
         local char = LocalPlayer.Character
@@ -608,20 +770,159 @@ RunService.Stepped:Connect(function()
         animPlayedConnection:Disconnect()
         animPlayedConnection = nil
     end
-end)
+    -- Gimmicks: Spinbot
+    if features.gimmicks.spinbot and LocalPlayer.Character then
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local speed = (features.gimmicks.spinSpeed or 50) / 10
+            hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(speed), 0)
+        end
+    end
+    -- Gimmicks: Upside Down
+    if features.gimmicks.upsideDown and LocalPlayer.Character then
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local cf = hrp.CFrame
+            hrp.CFrame = CFrame.fromMatrix(cf.Position, cf.RightVector, -cf.UpVector, -cf.LookVector)
+        end
+    end
+    -- Visual Gimmicks: Headless & Korblox (Fixed V5 - Stable)
+    if LocalPlayer.Character then
+        local char = LocalPlayer.Character
+        if features.gimmicks.headless then
+             local head = char:FindFirstChild("Head")
+             if head then
+                 head.Transparency = 1
+                 local face = head:FindFirstChild("face")
+                 if face then face.Transparency = 1 end
+                 
+                 local m = head:FindFirstChild("HeadlessMesh")
+                 if not m then
+                     m = Instance.new("SpecialMesh")
+                     m.Name = "HeadlessMesh"; m.MeshType = Enum.MeshType.FileMesh
+                     m.MeshId = "rbxassetid://1095708" -- Default head mesh
+                     m.Scale = Vector3.new(0.001, 0.001, 0.001) -- Make it tiny to hide
+                     m.Parent = head
+                 end
+             end
+             -- Hide neck bits and hair accessories
+             for _, v in pairs(char:GetDescendants()) do
+                 if v:IsA("BasePart") and (v.Name:lower():find("neck") or v.Name:lower():find("clutter")) then v.Transparency = 1 end
+                 if v:IsA("Accessory") and (v.Name:lower():find("head") or v.Name:lower():find("hair")) then
+                     local h = v:FindFirstChild("Handle")
+                     if h then h.Transparency = 1 end
+                 end
+             end
+        end
 
-RunService.Heartbeat:Connect(function()
-    -- Anti Fling: BaseParts
-    if features.antiFling.enabled then
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character then
-                for _, v in pairs(p.Character:GetDescendants()) do
-                    if v:IsA("BasePart") then v.CanCollide = false; v.Velocity = Vector3.zero end
+        if features.gimmicks.korblox then
+             local rig = (char:FindFirstChild("RightUpperLeg") and "R15") or "R6"
+             local rightLeg = (rig == "R15" and char:FindFirstChild("RightUpperLeg")) or char:FindFirstChild("Right Leg")
+             
+             if rightLeg then
+                 -- Pure mesh approach for Korblox stability
+                 local m = rightLeg:FindFirstChild("KorbloxMesh")
+                 if not m then
+                     m = Instance.new("SpecialMesh")
+                     m.Name = "KorbloxMesh"; m.MeshType = Enum.MeshType.FileMesh
+                     m.MeshId = "rbxassetid://101851696" -- Korblox leg mesh
+                     m.Scale = (rig == "R15" and Vector3.new(1.1, 1, 1.1)) or Vector3.new(1, 1, 1) -- Standard scales
+                     m.Parent = rightLeg
+                 end
+                 rightLeg.Transparency = 0
+                 rightLeg.Color = Color3.fromRGB(50, 50, 50)
+                 
+                 -- Hide other R15 leg parts via Transparency ONLY (Crucial!)
+                 if rig == "R15" then
+                     local rl = char:FindFirstChild("RightLowerLeg"); if rl then rl.Transparency = 1 end
+                     local rf = char:FindFirstChild("RightFoot"); if rf then rf.Transparency = 1 end
+                 end
+             end
+        end
+    end
+
+
+
+
+
+
+
+    -- Gimmicks: Orbit
+    if features.gimmicks.orbit and LocalPlayer.Character then
+        local target = nil
+        if features.gimmicks.orbitMode == "Selected" then 
+            target = features.gimmicks.orbitTarget
+        elseif features.gimmicks.orbitMode == "Closest" then
+            local close, dist = nil, math.huge
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    local d = (p.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                    if d < dist then dist = d; close = p end
                 end
             end
+            target = close
+        elseif features.gimmicks.orbitMode == "Random" then
+            if not lastOrbitRandom or tick() - lastOrbitTick > 5 then
+                local all = Players:GetPlayers()
+                target = all[math.random(1, #all)]
+                if target == LocalPlayer then target = nil end
+                lastOrbitRandom = target; lastOrbitTick = tick()
+            else
+                target = lastOrbitRandom
+            end
+        end
+        
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local tHrp = target.Character.HumanoidRootPart
+            local rot = tick() * (features.gimmicks.orbitSpeed or 5)
+            local radius = features.gimmicks.orbitRadius or 10
+            
+            -- Dynamic Prediction (Ping-Aware)
+            local ping = LocalPlayer:GetNetworkPing()
+            local predictionFactor = ping * 2.5 -- Scale based on round-trip + buffer
+            local predictedPos = tHrp.Position + (tHrp.AssemblyLinearVelocity * predictionFactor)
+            
+            local offset = Vector3.new(math.cos(rot) * radius, 0, math.sin(rot) * radius)
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(predictedPos + offset + Vector3.new(0, 3, 0), predictedPos)
+            LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
         end
     end
 end)
+
+
+
+-- High Priority Priority Loop (Upside Down and Soft Aim)
+RunService:BindToRenderStep("AntigravityGimmicks", Enum.RenderPriority.Camera.Value + 1, function()
+    if features.gimmicks.upsideDown and LocalPlayer.Character then
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.CFrame = hrp.CFrame * CFrame.Angles(0, 0, math.pi)
+        end
+    end
+    updateSoftAim()
+end)
+
+-- Optimized Performance Mods (Low Quality Mode)
+local lowQualEnabled = false
+local function updateLowQual()
+    if not lowQualEnabled then return end
+    for _, v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart") and v.Transparency == 0 then v.Material = Enum.Material.SmoothPlastic end
+        if v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1 end
+        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false end
+        if v:IsA("MeshPart") then v.RenderFidelity = Enum.RenderFidelity.Precise; v.Material = Enum.Material.SmoothPlastic end
+    end
+end
+
+
+
+
+
+
+RunService.Heartbeat:Connect(function()
+    -- Nothing heavy here anymore
+end)
+
 
 LocalPlayer.CharacterAdded:Connect(function() if flying then task.wait(0.5); startFly() end end)
 
@@ -631,8 +932,9 @@ LocalPlayer.CharacterAdded:Connect(function() if flying then task.wait(0.5); sta
 local MiscLeft = MiscTab:Section({ name = "Main Settings", side = "left" })
 local MiscRight = MiscTab:Section({ name = "Helper & Fun", side = "right" })
 
+
 MiscLeft:Toggle({
-    name = "Flight",
+    name = "Flight", Name = "Flight", text = "Flight",
     callback = function(bool)
         flying = bool
         if bool then 
@@ -654,16 +956,22 @@ MiscLeft:Toggle({
         end
     end
 })
-MiscLeft:Slider({ name = "Flight Speed", min = 1, max = 10, default = 1, suffix = "x", callback = function(val) flySpeed = val end })
+local flyS = MiscLeft:Slider({ name = "Flight Speed", Name = "Flight Speed", text = "Flight Speed", min = 1, max = 10, default = 1, suffix = "x", callback = function(val) flySpeed = val end })
+if flyS.items and flyS.items.name then flyS.items.name.set("Flight Speed") end
 
 -- Speed Mod (Aggressive Property Signal)
 local currentWs, currentJp, moveEnabled = 16, 50, false
-MiscLeft:Toggle({ name = "Enable Speed/Jump", callback = function(bool) moveEnabled = bool 
+MiscLeft:Toggle({ name = "Enable Speed/Jump", Name = "Enable Speed/Jump", text = "Enable Speed/Jump", callback = function(bool) moveEnabled = bool 
     local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
     if hum and bool then hum.WalkSpeed = currentWs; hum.JumpPower = currentJp end
 end })
-MiscLeft:Slider({ name = "Walk Speed", min = 16, max = 200, default = 16, suffix = " spd", callback = function(val) currentWs = val end })
-MiscLeft:Slider({ name = "Jump Power", min = 50, max = 300, default = 50, suffix = " pwr", callback = function(val) currentJp = val end })
+local wsS = MiscLeft:Slider({ name = "Walk Speed", Name = "Walk Speed", text = "Walk Speed", min = 16, max = 200, default = 16, suffix = " spd", callback = function(val) currentWs = val end })
+local jpS = MiscLeft:Slider({ name = "Jump Power", Name = "Jump Power", text = "Jump Power", min = 50, max = 300, default = 50, suffix = " pwr", callback = function(val) currentJp = val end })
+
+for _, s in pairs({wsS, jpS}) do if s.items and s.items.name then s.items.name.set(s.name or s.text) end end
+
+
+
 
 -- Character Connected Logic
 LocalPlayer.CharacterAdded:Connect(function(char)
@@ -686,11 +994,12 @@ if LocalPlayer.Character then
 end
 
 -- Anti Void Re-Implementation
-MiscRight:Toggle({ name = "Anti Void", callback = function(bool) 
+MiscRight:Toggle({ name = "Anti Void", Name = "Anti Void", text = "Anti Void", callback = function(bool) 
+    features.antiVoid.enabled = bool
     if bool then
-        if features.antiVoid.platform then features.antiVoid.platform:Destroy() end -- Reset
+        if features.antiVoid.platform then features.antiVoid.platform:Destroy() end
         local p = Instance.new("Part", Workspace)
-        p.Size = Vector3.new(9999, 10, 9999) -- Huge
+        p.Size = Vector3.new(9999, 10, 9999)
         p.Position = Vector3.new(0, -300, 0)
         p.Anchored = true
         p.CanCollide = true
@@ -702,11 +1011,26 @@ MiscRight:Toggle({ name = "Anti Void", callback = function(bool)
         if features.antiVoid.platform then features.antiVoid.platform:Destroy() end
     end
 end })
-MiscRight:Toggle({ name = "Anti DC", callback = function(bool) if bool then local c = Workspace:FindFirstChild("Cutscenes"); if c and c:FindFirstChild("Death Cutscene") then c["Death Cutscene"]:Destroy() end end end })
+MiscRight:Toggle({ name = "Anti DC", Name = "Anti DC", text = "Anti DC", callback = function(bool) if bool then local c = Workspace:FindFirstChild("Cutscenes"); if c and c:FindFirstChild("Death Cutscene") then c["Death Cutscene"]:Destroy() end end end })
+MiscRight:Toggle({ name = "Orbit", Name = "Orbit", text = "Orbit", callback = function(bool) features.gimmicks.orbit = bool end })
+MiscRight:Dropdown({ name = "Orbit Mode", Name = "Orbit Mode", text = "Orbit Mode", items = {"Selected", "Closest", "Random"}, default = "Closest", callback = function(val) features.gimmicks.orbitMode = val end })
+local orbT = MiscRight:Dropdown({ name = "Orbit Target", Name = "Orbit Target", text = "Orbit Target", items = playerNames, default = "None", callback = function(val) features.gimmicks.orbitTarget = Players:FindFirstChild(val or "") end })
+table.insert(dropdownsToUpdate, orbT)
 
-local playerNames = {"None"} 
-for _, p in ipairs(Players:GetPlayers()) do table.insert(playerNames, p.Name) end
-MiscRight:Dropdown({ name = "Emote Follow", items = playerNames, default = "None", callback = function(val)
+local rS = MiscRight:Slider({ name = "Orbit Radius", Name = "Orbit Radius", text = "Orbit Radius", min = 5, max = 50, default = 10, suffix = " studs", callback = function(val) features.gimmicks.orbitRadius = val end })
+local oS = MiscRight:Slider({ name = "Orbit Speed", Name = "Orbit Speed", text = "Orbit Speed", min = 1, max = 100, default = 5, suffix = "x", callback = function(val) features.gimmicks.orbitSpeed = val end })
+local gS = MiscRight:Slider({ name = "World Gravity", Name = "World Gravity", text = "World Gravity", min = 0, max = 500, default = 196.2, suffix = " g", callback = function(val) Workspace.Gravity = val end })
+local fvS = MiscRight:Slider({ name = "FOV Expansion", Name = "FOV Expansion", text = "FOV Expansion", min = 70, max = 120, default = 70, suffix = "°", callback = function(val) features.world.fov = val end })
+MiscRight:Toggle({ name = "No Camera Shake / Stabilize", Name = "No Camera Shake / Stabilize", text = "No Camera Shake / Stabilize", callback = function(bool) features.world.disableShake = bool end })
+
+
+
+for _, s in pairs({rS, oS, gS, fvS}) do if s.items and s.items.name then s.items.name.set(s.name or s.text) end end
+
+MiscRight:Toggle({ name = "Headless (Visual)", Name = "Headless (Visual)", text = "Headless (Visual)", callback = function(bool) features.gimmicks.headless = bool end })
+MiscRight:Toggle({ name = "Korblox Leg (Visual)", Name = "Korblox Leg (Visual)", text = "Korblox Leg (Visual)", callback = function(bool) features.gimmicks.korblox = bool end })
+
+local emtF = MiscRight:Dropdown({ name = "Emote Follow", Name = "Emote Follow", text = "Emote Follow", items = playerNames, default = "None", callback = function(val)
     features.bootyClap.target = Players:FindFirstChild(val or "")
     features.bootyClap.following = (val ~= "None" and features.bootyClap.target)
     if features.bootyClap.following and not features.bootyClap.loop then
@@ -720,13 +1044,18 @@ MiscRight:Dropdown({ name = "Emote Follow", items = playerNames, default = "None
              end
              local tChar = features.bootyClap.target.Character
              if tChar and tChar:FindFirstChild("HumanoidRootPart") then 
-                 -- Oscillate forward/backward (Z axis relative to target)
-                 local offset = 3 + math.sin(tick() * 5) * 2 -- Base 3, +/- 2 (Ranges 1 to 5)
+                 local offset = 3 + math.sin(tick() * 5) * 2
                  LocalPlayer.Character.HumanoidRootPart.CFrame = tChar.HumanoidRootPart.CFrame * CFrame.new(0, 0, offset) 
              end
          end)
     end
 end })
+table.insert(dropdownsToUpdate, emtF)
+
+
+
+
+
 
 -- Watermark (Ported from example.lua)
 local gamesense = Instance.new("ScreenGui")
@@ -914,6 +1243,111 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
+-- ====================
+-- TAB: SETTINGS
+-- ====================
+local MainSettings = SettingsTab:Section({ name = "Boosters & Spammer", side = "left" })
+local FlagSection = SettingsTab:Section({ name = "FastFlags (BETA)", side = "right" })
+
+
+MainSettings:Toggle({ name = "FPS Booster", callback = function(bool)
+    features.performance.fpsBooster = bool
+    if bool then
+        -- Fast strip
+        for _, v in pairs(Workspace:GetDescendants()) do
+            if v:IsA("BasePart") then v.CastShadow = false end
+            if v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1 end
+            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false end
+        end
+        Lighting.GlobalShadows = false
+    else
+        Lighting.GlobalShadows = true
+        -- Don't re-enable everything, game will create new ones as needed
+    end
+end })
+
+
+MainSettings:Toggle({ name = "FPS Ultra Booster (LQ)", Name = "FPS Ultra Booster (LQ)", callback = function(bool)
+    if not _G.ScriptLoaded then return end
+    lowQualEnabled = bool
+    if bool then
+        task.spawn(updateLowQual)
+    else
+        pcall(function()
+            for _, v in pairs(Workspace:GetDescendants()) do
+                if v:IsA("BasePart") then v.Material = Enum.Material.Plastic end
+                if v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 0 end
+            end
+        end)
+    end
+end })
+
+MainSettings:Toggle({ name = "Input Delay Remover (LMLYX v9)", Name = "Input Delay Remover (LMLYX v9)", callback = function(bool)
+    if bool then
+        local fflags = {
+            ["DFIntTouchSenderMaxBandwidthBps"] = "50000", ["DFIntPhysicsSenderMaxBandwidthBps"] = "200000000", ["DFIntClusterSenderMaxJoinBandwidthBps"] = "10000000",
+            ["DFIntDataSenderRate"] = "10000", ["DFIntS2PhysicsSenderRate"] = "250", ["DFIntServerTickRate"] = "60", ["DFIntPlayerNetworkUpdateRate"] = "60",
+            ["FFlagOptimizeNetwork"] = "True", ["FFlagOptimizeNetworkTransport"] = "True", ["FFlagOptimizeNetworkRouting"] = "True",
+            ["DFIntRakNetNakResendDelayMs"] = "1", ["DFIntRakNetSelectTimeoutMs"] = "2", ["DFIntRakNetLoopMs"] = "1",
+            ["DFIntMaxDataPacketPerSend"] = "2147483647", ["DFIntNetworkQualityResponderMaxWaitTime"] = "2",
+            ["DFIntSimAdaptiveHumanoidPDControllerSubstepMultiplier"] = "50000", ["FFlagQuaternionPoseCorrection"] = "True",
+            ["DFIntTimestepArbiterHumanoidTurningVelThreshold"] = "60000", ["FFlagAnimationStreamSourceUseRuntimeSyncPrims"] = "True",
+            ["DFIntAngularVelociryLimit"] = "800000", ["DFFlagHumanoidSimWorld"] = "True", ["DFIntBandwidthManagerDataSenderMaxWorkCatchupMs"] = "5000",
+            ["DFFlagTrackNetworkSenderStall"] = "True", ["DFFlagDataSenderEmptyTrackBeforeRun"] = "True", ["DFIntPhysicsNOUCountHundredth"] = "1000000",
+            ["DFFlagFixPhysicsSenderBlockMultiplier"] = "True", ["FFlagAnimationStreamTrackUseRuntimeSyncPrims"] = "True",
+            ["FFlagAvatarUseRuntimeSyncPrims4"] = "True", ["DFFlagRobloxTelemetryEnableSenderCallback"] = "False",
+            ["DFFlagSimHumanoidFirstPerson240hz"] = "True", ["FFlagHumanoidStateUseRuntimeSyncPrims"] = "True",
+            ["FFlagKeyframeSequenceUseRuntimeSyncPrims"] = "True", ["FFlagParallelLuauRuntimeConcurrency"] = "True",
+            ["FFlagTaskSchedulerUseRuntimeSyncPrims"] = "True", ["FFlagEnableAsyncInput"] = "True"
+        }
+        for f, v in pairs(fflags) do pcall(function() setfflag(f, v) end) end
+        settings().Rendering.MeshCacheSize = 0
+        pcall(function() settings().Network.DirectReplicationLimit = 500 end)
+    end
+end })
+
+
+
+
+
+
+local capS = FlagSection:Slider({ name = "FPS Cap", min = 30, max = 2000, default = 240, suffix = " fps", callback = function(val) setfpscap(val) end })
+if capS.items and capS.items.name then capS.items.name.set("FPS Cap") end
+
+FlagSection:Button({ name = "Enable Performance FFlags", callback = function()
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        settings().Rendering.MeshCacheSize = 0
+        if setfflag then
+            setfflag("FFlagDebugDisplayFPS", "True")
+            setfflag("FFlagRenderShadowIntensity", "0")
+            setfflag("FFlagRenderTextureDelay", "0")
+        end
+    end)
+    Notifications:Notification({ title = "Settings", body = "Optimized FFlags and Rendering applied!", duration = 5 })
+end })
+
+_G.ScriptLoaded = true
+
+
+
+local spamMsg = "femboy.sense owns you"
+MainSettings:Textbox({ name = "Spam Message", placeholder = "Text here...", callback = function(val) spamMsg = val end })
+
+MainSettings:Toggle({ name = "Enable Spammer", callback = function(bool)
+
+
+    features.gimmicks.chatSpam = bool
+    task.spawn(function()
+        while features.gimmicks.chatSpam do
+            ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(spamMsg, "All")
+            task.wait(3)
+        end
+    end)
+end })
+
+
+
 -- Init
 task.delay(1, function()
     Window.toggle_menu(true)
@@ -921,6 +1355,7 @@ task.delay(1, function()
         Library:init_config(Window)
     end
 end)
+
 
 -- Ping Monitor
 local lastPingWarning = 0
