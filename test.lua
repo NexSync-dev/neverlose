@@ -43,7 +43,7 @@ _G.TSB_Features = features
 _G.ScriptLoaded = false
 
 -- Permanent settings on load
-Workspace.FallenPartsDestroyHeight = -100000
+Workspace.FallenPartsDestroyHeight = 0/0
 
 -- Advanced NoStun Logic (High UNC)
 task.spawn(function()
@@ -239,21 +239,23 @@ local function createDrawing(type, props)
 end
 
 local function removeEsp(p)
-    if p.Character and p.Character:FindFirstChild("Humanoid") then
-        local hum = p.Character.Humanoid
-        hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Subject
-    end
-    if espCache[p] then 
-        for k, d in pairs(espCache[p]) do 
-            if type(d) == "table" then for _, l in pairs(d) do l:Remove() end else d:Remove() end
-        end 
-        espCache[p] = nil 
-    end
-    -- Remove Chams
-    if p.Character then
-        local hl = p.Character:FindFirstChild("TSB_Highlight")
-        if hl then hl:Destroy() end
-    end
+    pcall(function()
+        if p and p.Character and p.Character:FindFirstChild("Humanoid") then
+            local hum = p.Character.Humanoid
+            hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Subject
+        end
+        if espCache[p] then 
+            for k, d in pairs(espCache[p]) do 
+                if type(d) == "table" then for _, l in pairs(d) do pcall(function() l:Remove() end) end else pcall(function() d:Remove() end) end
+            end 
+            espCache[p] = nil 
+        end
+        -- Remove Chams
+        if p and p.Character then
+            local hl = p.Character:FindFirstChild("TSB_Highlight")
+            if hl then hl:Destroy() end
+        end
+    end)
 end
 
 RunService.RenderStepped:Connect(function()
@@ -292,9 +294,11 @@ RunService.RenderStepped:Connect(function()
                   if not cache then
                       -- Enforce visibility when ESP is active
                       if hum then
-                          hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.AlwaysOnTop
-                          hum.NameDisplayDistance = 1000
-                          hum.HealthDisplayDistance = 1000
+                          pcall(function()
+                              hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Subject
+                              hum.NameDisplayDistance = 1000
+                              hum.HealthDisplayDistance = 1000
+                          end)
                       end
                       cache = {
                           box = createDrawing("Square", {Thickness=1, Color=Color3.new(1,0,0), Filled=false, Transparency=1}),
@@ -1062,7 +1066,9 @@ RunService.Stepped:Connect(function()
             -- Keep usernames visible dynamically
             local hum = target.Character:FindFirstChildOfClass("Humanoid")
             if hum then
-                hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.AlwaysOnTop
+                pcall(function()
+                    hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Subject
+                end)
             end
         end
     end
