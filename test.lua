@@ -13,6 +13,17 @@ local LocalPlayer = Players.LocalPlayer
 -- Helper function for notifications
 local function rgb(r,g,b) return Color3.fromRGB(r,g,b) end
 
+local function notify(title, body, col)
+    pcall(function()
+        if notifications and notifications.create_notification then
+            notifications:create_notification({
+                name = title .. "\n" .. body,
+                color = col or Color3.fromRGB(255, 255, 255)
+            })
+        end
+    end)
+end
+
 
 -- Global State
 local features = {
@@ -240,9 +251,11 @@ end
 
 local function removeEsp(p)
     pcall(function()
-        if p and p.Character and p.Character:FindFirstChild("Humanoid") then
-            local hum = p.Character.Humanoid
-            hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Subject
+        if p and p.Character then
+            local hum = p.Character:FindFirstChild("Humanoid")
+            if hum then
+                hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Subject
+            end
         end
         if espCache[p] then 
             for k, d in pairs(espCache[p]) do 
@@ -549,7 +562,13 @@ BlatantCombat:Toggle({
                         if animate then
                             for i,v in pairs(animate:GetPlayingAnimationTracks()) do
                                 if ifind(animations, v.Animation.AnimationId) then
-                                    task.wait(animations[v.Animation.AnimationId])
+                                    -- DYNAMIC PING COMPENSATION
+                                    local pTime = animations[v.Animation.AnimationId]
+                                    local ping = LocalPlayer:GetNetworkPing()
+                                    -- If ping is low (< 50ms), we wait slightly longer to ensure server hit
+                                    local delay = (ping < 0.05) and 0.1 or 0
+                                    
+                                    task.wait(pTime + delay)
                                     dothetech=true
                                     lastcf = character.HumanoidRootPart.CFrame
                                     v.Stopped:Connect(function()
@@ -558,7 +577,7 @@ BlatantCombat:Toggle({
                                     local startTime = tick()
                                     repeat wait()
                                         Workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
-                                        character.HumanoidRootPart.CFrame = CFrame.new(0,-300,0)
+                                        character.HumanoidRootPart.CFrame = CFrame.new(0,-498,0)
                                         character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
                                         character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
                                         if tick() - startTime > 1.5 then dothetech = false end -- Safety timeout
@@ -710,18 +729,28 @@ local function setupCharacter(char)
              
              if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
                  local tHrp = target.Character.HumanoidRootPart
-                 local origin = tHrp.Position
+                 
+                 -- GET PREDICTED POSITION (Latency Compensation)
+                 local ourPing = LocalPlayer:GetNetworkPing()
+                 local theirPing = target:GetNetworkPing()
+                 local totalLatency = (ourPing + theirPing) * 1.5 -- Buffer for processing
+                 
+                 local predictedOrigin = tHrp.Position + (tHrp.AssemblyLinearVelocity * totalLatency)
+                 
                  local radius = 5
                  local angle = math.rad(math.random(0,360))
                  local offset = Vector3.new(math.cos(angle)*radius, 0, math.sin(angle)*radius)
                  
                  local oldCF = char.HumanoidRootPart.CFrame
-                 -- Teleport
-                 char.HumanoidRootPart.CFrame = CFrame.lookAt(origin + offset, origin)
+                 -- Teleport to Predicted Position
+                 char.HumanoidRootPart.CFrame = CFrame.lookAt(predictedOrigin + offset, predictedOrigin)
                  
                  -- Look at loop (short)
                  local laLoop; laLoop = RunService.Heartbeat:Connect(function()
-                     if char.Parent and tHrp.Parent then char.HumanoidRootPart.CFrame = CFrame.lookAt(char.HumanoidRootPart.Position, tHrp.Position) else laLoop:Disconnect() end
+                      if char.Parent and tHrp.Parent then 
+                          local curPredicted = tHrp.Position + (tHrp.AssemblyLinearVelocity * totalLatency)
+                          char.HumanoidRootPart.CFrame = CFrame.lookAt(char.HumanoidRootPart.Position, curPredicted) 
+                      else laLoop:Disconnect() end
                  end)
                  
                  t.Stopped:Wait()
@@ -731,7 +760,50 @@ local function setupCharacter(char)
              end
         end
     end)
-    table.insert(charConnections, conn2)
+    -- Death Counter Rescue & Counter-Strike Hook (Animation based)
+    local conn3 = anim.AnimationPlayed:Connect(function(t)
+        if t.Animation and t.Animation.AnimationId == "rbxassetid://11343250001" then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local oldPos = hrp.CFrame
+                notify("Rescue System", "Counter detected! Counter-striking...", Color3.new(1,0,1))
+                
+                -- Immediate Camera Rescue
+                task.wait(0.05)
+                workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+                workspace.CurrentCamera.CameraSubject = hum
+                
+                -- OFFENSIVE RETALIATION: Void Drop (Safe Depth)
+                task.spawn(function()
+                    -- Create Temp Platform above void
+                    local p = Instance.new("Part", workspace)
+                    p.Size = Vector3.new(30, 1, 30)
+                    p.Position = Vector3.new(3000, -499, 3000) -- Safe height (-500 is void line)
+                    p.Anchored = true
+                    p.CanCollide = true
+                    p.Transparency = 0.5
+                    p.BrickColor = BrickColor.new("Really black")
+                    
+                    -- Teleport to Void Floor (Safety Offset)
+                    hrp.CFrame = p.CFrame + Vector3.new(0, 4, 0)
+                    
+                    task.wait(2) -- Wait for attacker to fall/be trapped
+                    
+                    -- Teleport Home
+                    hrp.CFrame = oldPos
+                    p:Destroy()
+                    
+                    -- Second Camera Reset (Fixes camera break on death)
+                    task.wait(5)
+                    workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+                    workspace.CurrentCamera.CameraSubject = hum
+                    
+                    notify("Rescue System", "Retaliation complete. Returned to map.", Color3.new(0,1,0))
+                end)
+            end
+        end
+    end)
+    table.insert(charConnections, conn3)
 end
 
 LocalPlayer.CharacterAdded:Connect(setupCharacter)
@@ -966,29 +1038,8 @@ RunService.Stepped:Connect(function()
         end
     end
     
-    -- Anti Death Counter: Auto TP to kill Death Counter users
-    if features.antiDeath.enabled then
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character then
-                local hasDC = (p.Backpack and p.Backpack:FindFirstChild("Death Counter")) or (p.Character and p.Character:FindFirstChild("Death Counter"))
-                if hasDC and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    -- TP to target
-                    local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
-                    if targetHRP then
-                        LocalPlayer.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
-                        task.wait(0.5)
-                        -- TP to void
-                        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(0, -400, 0)
-                        task.wait(1)
-                        -- Return
-                        if features.antiDeath.originalPos then
-                            LocalPlayer.Character.HumanoidRootPart.CFrame = features.antiDeath.originalPos
-                        end
-                    end
-                end
-            end
-        end
-    end
+    -- Anti Death Counter: Moved to separate task loop below to prevent yielding in Stepped
+
 
 
 
@@ -1227,7 +1278,24 @@ MiscRight:Toggle({ name = "Anti Void", callback = function(bool)
         if features.antiVoid.platform then features.antiVoid.platform:Destroy() end
     end
 end })
-MiscRight:Toggle({ name = "Anti DC", callback = function(bool) if bool then local c = Workspace:FindFirstChild("Cutscenes"); if c and c:FindFirstChild("Death Cutscene") then c["Death Cutscene"]:Destroy() end end end })
+local antiDCConn = nil
+MiscRight:Toggle({ name = "Anti DC", callback = function(bool) 
+    if antiDCConn then antiDCConn:Disconnect(); antiDCConn = nil end
+    if bool then 
+        local function check(v)
+            if v.Name == "Death Cutscene" then 
+                task.wait(0.1) -- Tiny delay so game sets up
+                v:Destroy()
+                notify("Anti DC", "Cutscene skipped automatically", Color3.new(1,1,1))
+            end
+        end
+        local cut = Workspace:FindFirstChild("Cutscenes")
+        if cut then
+            antiDCConn = cut.ChildAdded:Connect(check)
+            for _, v in pairs(cut:GetChildren()) do check(v) end
+        end
+    end 
+end })
 MiscRight:Toggle({ name = "Orbit", callback = function(bool) features.gimmicks.orbit = bool end })
 MiscRight:Dropdown({ name = "Orbit Mode", items = {"Selected", "Closest", "Random"}, default = "Closest", callback = function(val) features.gimmicks.orbitMode = val end })
 local orbT = MiscRight:Dropdown({ name = "Orbit Target", items = playerNames, default = "None", callback = function(val) features.gimmicks.orbitTarget = Players:FindFirstChild(val or "") end })
@@ -1247,20 +1315,25 @@ local emtF = MiscRight:Dropdown({ name = "Emote Follow", items = playerNames, de
     features.bootyClap.target = Players:FindFirstChild(val or "")
     features.bootyClap.following = (val ~= "None" and features.bootyClap.target)
     if features.bootyClap.following and not features.bootyClap.loop then
-         local anim = Instance.new("Animation"); anim.AnimationId = "rbxassetid://120789866363939"
-         local track = LocalPlayer.Character.Humanoid.Animator:LoadAnimation(anim); track:Play()
-         features.bootyClap.loop = RunService.Heartbeat:Connect(function()
-             if not features.bootyClap.following or not features.bootyClap.target then 
-                 track:Stop(); 
-                 if features.bootyClap.loop then features.bootyClap.loop:Disconnect(); features.bootyClap.loop = nil end 
-                 return 
-             end
-             local tChar = features.bootyClap.target.Character
-             if tChar and tChar:FindFirstChild("HumanoidRootPart") then 
-                 local offset = 3 + math.sin(tick() * 5) * 2
-                 LocalPlayer.Character.HumanoidRootPart.CFrame = tChar.HumanoidRootPart.CFrame * CFrame.new(0, 0, offset) 
-             end
-         end)
+         local char = LocalPlayer.Character
+         local hum = char and char:FindFirstChild("Humanoid")
+         if hum then
+             local anim = Instance.new("Animation"); anim.AnimationId = "rbxassetid://120789866363939"
+             local track = hum.Animator:LoadAnimation(anim)
+             if track then track:Play() end
+             features.bootyClap.loop = RunService.Heartbeat:Connect(function()
+                 if not features.bootyClap.following or not features.bootyClap.target then 
+                     if track then track:Stop() end 
+                     if features.bootyClap.loop then features.bootyClap.loop:Disconnect(); features.bootyClap.loop = nil end 
+                     return 
+                 end
+                 local tChar = features.bootyClap.target.Character
+                 if tChar and tChar:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then 
+                     local offset = 3 + math.sin(tick() * 5) * 2
+                     LocalPlayer.Character.HumanoidRootPart.CFrame = tChar.HumanoidRootPart.CFrame * CFrame.new(0, 0, offset) 
+                 end
+             end)
+         end
     end
 end })
 table.insert(dropdownsToUpdate, emtF)
@@ -1471,7 +1544,7 @@ local function fetchServers()
 end
 
 ServerSettings:Button({ name = "Server Hop", callback = function() 
-    notifications:Notification({ title = "Server Hop", body = "Searching for servers...", duration = 3 })
+    notify("Server Hop", "Searching for servers...", Color3.fromRGB(200, 200, 200))
     local servers = fetchServers()
     local valid = {}
     for _, s in ipairs(servers) do 
@@ -1484,15 +1557,15 @@ ServerSettings:Button({ name = "Server Hop", callback = function()
     end
     if #valid > 0 then 
         local chosen = valid[math.random(1, #valid)]
-        notifications:Notification({ title = "Server Hop", body = "Found server (" .. chosen.playing .. "/" .. chosen.maxPlayers .. " players)", duration = 3 })
+        notify("Server Hop", "Found server (" .. chosen.playing .. "/" .. chosen.maxPlayers .. " players)", Color3.fromRGB(100, 255, 100))
         task.wait(0.5)
         TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, LocalPlayer) 
     else
-        notifications:Notification({ title = "Server Hop", body = "No available servers found!", duration = 5 })
+        notify("Server Hop", "No available servers found!", Color3.fromRGB(255, 100, 100))
     end
 end })
 ServerSettings:Button({ name = "Lowest Players", callback = function() 
-    notifications:Notification({ title = "Server Hop", body = "Searching for least populated server...", duration = 3 })
+    notify("Server Hop", "Searching for least populated server...", Color3.fromRGB(200, 200, 200))
     local servers = fetchServers()
     local valid = {}
     for _, s in ipairs(servers) do 
@@ -1504,11 +1577,11 @@ ServerSettings:Button({ name = "Lowest Players", callback = function()
     end
     table.sort(valid, function(a, b) return a.playing < b.playing end)
     if valid[1] then 
-        notifications:Notification({ title = "Server Hop", body = "Found server (" .. valid[1].playing .. "/" .. valid[1].maxPlayers .. " players)", duration = 3 })
+        notify("Server Hop", "Found server (" .. valid[1].playing .. "/" .. valid[1].maxPlayers .. " players)", Color3.fromRGB(100, 255, 100))
         task.wait(0.5)
         TeleportService:TeleportToPlaceInstance(game.PlaceId, valid[1].id, LocalPlayer) 
     else
-        notifications:Notification({ title = "Server Hop", body = "No available servers found!", duration = 5 })
+        notify("Server Hop", "No available servers found!", Color3.fromRGB(255, 100, 100))
     end
 end })
 
@@ -1668,13 +1741,41 @@ task.spawn(function()
         if ping > 100 then
             if tick() - lastPingWarning > 60 then -- 1 minute cooldown to avoid spam
                 lastPingWarning = tick()
-                notifications:Notification({
-                    title = "Ping Warning",
-                    body = "your ping is a little high, teleporting players might not work due to game limitations",
-                    duration = 10
-                })
+                notify("Ping Warning", "your ping is a little high, teleporting players might not work due to game limitations", Color3.new(1,0,0))
             end
         end
         task.wait(10)
+    end
+end)
+
+-- Anti Death Counter & DC Rescue Thread
+task.spawn(function()
+    while task.wait(0.5) do
+        -- OFFENSIVE LOGIC: Kill others using DC (Legacy feature)
+        if features.antiDeath.enabled then
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer and p.Character then
+                        local backpack = p:FindFirstChild("Backpack")
+                        local hasDC = (backpack and backpack:FindFirstChild("Death Counter")) or (p.Character and p.Character:FindFirstChild("Death Counter"))
+                        
+                        if hasDC then
+                            local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
+                            if targetHRP and (targetHRP.Position - hrp.Position).Magnitude < 20 then
+                                local oldPos = hrp.CFrame
+                                notify("Anti Death Counter", "Counter-Strike on " .. p.Name, Color3.new(1,0.5,0))
+                                hrp.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
+                                task.wait(0.1)
+                                hrp.CFrame = CFrame.new(0, -900, 0) -- Deep void
+                                task.wait(0.5)
+                                hrp.CFrame = oldPos
+                                task.wait(1)
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
 end)
