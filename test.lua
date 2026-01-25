@@ -24,7 +24,6 @@ local function notify(title, body, col)
     end)
 end
 
-loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/sigmea"))()
 
 -- Global State
 local features = {
@@ -122,7 +121,7 @@ end)
 
 
 -- Library Initialization
-local Library, notifications = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/lib.lua"))()
+local Library, notifications = loadstring(game:HttpGet("https://raw.githubusercontent.com/l1l1l1l1l11l1l1l1l11/Neverlose-Main/refs/heads/main/nssso.luau"))()
 
 -- Window
 local Window = Library:window({
