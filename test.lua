@@ -121,7 +121,7 @@ end)
 
 
 -- Library Initialization
-local Library, notifications = loadstring(game:HttpGet("https://raw.githubusercontent.com/l1l1l1l1l11l1l1l1l11/Neverlose-Main/refs/heads/main/nssso.luau"))()
+local Library, notifications = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/lib.lua"))()
 
 -- Window
 local Window = Library:window({
