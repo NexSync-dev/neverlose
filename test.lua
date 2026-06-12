@@ -26,6 +26,9 @@ end
 
 
 -- Global State
+getgenv().resolutionScale = getgenv().resolutionScale or 1.0
+getgenv().resolutionActive = getgenv().resolutionActive or false
+
 local features = {
     autoBlock = { enabled = false, range = 10, bubble = nil, looking = false },
     aimbot = { mode = "closest to player", trackConnection = nil, animeTp = false, shiftlockFix = true },
@@ -56,11 +59,39 @@ _G.ScriptLoaded = false
 -- Permanent settings on load
 Workspace.FallenPartsDestroyHeight = -100000
 
+-- Resolution Helper
+local function applyResolution(scale)
+    getgenv().resolutionScale = scale
+    getgenv().resolutionActive = (scale ~= 1.0)
+end
+
+-- Permanent Camera Stabilizer
+RunService:BindToRenderStep("PermanentStabilizer", Enum.RenderPriority.Camera.Value + 1, function()
+    local camera = Workspace.CurrentCamera
+    if not camera then return end
+    
+    -- FOV always applies
+    camera.FieldOfView = features.world.fov or 70
+    
+    -- Shake disable is separate (runs BEFORE resolution manipulation)
+    if features.world.disableShake and not getgenv().resolutionActive then
+        local cf = camera.CFrame
+        local x, y, _ = cf:ToEulerAnglesYXZ()
+        camera.CFrame = CFrame.new(cf.Position) * CFrame.fromEulerAnglesYXZ(x, y, 0)
+    end
+end)
+
+
+
+
 -- Advanced NoStun Logic (High UNC)
 task.spawn(function()
+    task.wait(2) -- Safety delay for first join
     local success, mt = pcall(function() return getrawmetatable(game) end)
-    if success then
-        setreadonly(mt, false)
+    if success and mt then
+        local mt_success = pcall(function() setreadonly(mt, false) end)
+        if not mt_success then return end
+        
         local oldIndex = mt.__newindex
         mt.__newindex = function(self, key, value)
             if features.noStun.enabled and features.noStun.highUNC and (key == "Stunned" or key == "LightStunned" or key == "StunSubject" or key == "DashLock" or key == "Busy" or key == "BusySubject" or key == "StunWalkSpeed") then
@@ -71,7 +102,21 @@ task.spawn(function()
     end
 end)
 
--- NoStun Attribute Loop
+-- NoStun Logic (Optimized)
+local function handleNoStun(char)
+    if not char then return end
+    char.ChildAdded:Connect(function(v)
+        if features.noStun.enabled then
+            if v.Name == "Ragdoll" or v.Name == "Stun" or v.Name == "Freeze" or v.Name == "Stunned" or v.Name == "Busy" or v.Name == "LightStunned" then
+                task.defer(function() v:Destroy() end)
+            end
+        end
+    end)
+end
+
+LocalPlayer.CharacterAdded:Connect(handleNoStun)
+if LocalPlayer.Character then handleNoStun(LocalPlayer.Character) end
+
 task.spawn(function()
     while task.wait(0.1) do
         if features.noStun.enabled then
@@ -87,41 +132,23 @@ task.spawn(function()
                 char:SetAttribute("StunJumpPower", 50)
                 char:SetAttribute("Ragdoll", false)
                 char:SetAttribute("Freeze", false)
-                
-                -- Remove stun-related value objects
-                for _, v in pairs(char:GetChildren()) do
-                    if v:IsA("BoolValue") or v:IsA("StringValue") then
-                        if v.Name == "Stunned" or v.Name == "LightStunned" or v.Name == "Ragdoll" or v.Name == "Freeze" or v.Name == "Busy" then
-                            v:Destroy()
-                        end
-                    end
-                end
             end
         end
     end
 end)
 
--- Permanent Camera Stabilizer
-RunService:BindToRenderStep("PermanentStabilizer", Enum.RenderPriority.Camera.Value + 1, function()
-    local camera = Workspace.CurrentCamera
-    if not camera then return end
-    
-    -- FOV always applies
-    camera.FieldOfView = features.world.fov or 70
-    
-    -- Shake disable is separate (runs BEFORE resolution manipulation)
-    if features.world.disableShake and not resolutionActive then
-        local cf = camera.CFrame
-        local x, y, _ = cf:ToEulerAnglesYXZ()
-        camera.CFrame = CFrame.new(cf.Position) * CFrame.fromEulerAnglesYXZ(x, y, 0)
-    end
+-- Library Initialization
+local Library, notifications
+local success, err = pcall(function()
+    local lib, notif = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/lib.lua"))()
+    Library = lib
+    notifications = notif
 end)
 
-
-
-
--- Library Initialization
-local Library, notifications = loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlose/refs/heads/main/lib.lua"))()
+if not success or not Library then
+    warn("Failed to load library: " .. tostring(err))
+    return
+end
 
 -- Window
 local Window = Library:window({
@@ -151,7 +178,7 @@ local function updatePlayerList()
 end
 
 Players.PlayerAdded:Connect(function() task.wait(1); updatePlayerList() end)
-Players.PlayerRemoving:Connect(function() task.wait(1); updatePlayerList() end)
+Players.PlayerRemoving:Connect(updatePlayerList)
 updatePlayerList()
 
 
@@ -181,14 +208,25 @@ local function updateSoftAim()
         end
     end
     if closestTarget then
-        local dir = (closestTarget.Position - hrp.Position).Unit
+        local targetPos = closestTarget.Position
+        local tPlayer = Players:GetPlayerFromCharacter(closestTarget.Parent)
+        if features.hvh.resolver and tPlayer and features.hvh.resolvedPositions[tPlayer.Name] then
+            targetPos = features.hvh.resolvedPositions[tPlayer.Name]
+        end
+
+        local dir = (targetPos - hrp.Position).Unit
         local lookCf = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
+
+        -- Randomized smoothing for anti-detection
+        local smoothFactor = 0.4 + (math.random(-5, 5) / 100)
+
         if features.aimbot.shiftlockFix then
-            hrp.CFrame = hrp.CFrame:Lerp(lookCf, 0.45) -- Faster, smoother tracking
+            hrp.CFrame = hrp.CFrame:Lerp(lookCf, smoothFactor)
         else
             hrp.CFrame = lookCf
         end
     end
+
 
 end
 
@@ -221,22 +259,49 @@ local espConfig = {
     tracerOrigin = "Bottom",
     tsbClass = true,
     deathCounter = true,
-    fillTransparency = 0.5
+    fillTransparency = 0.5,
+    headDot = false,
+    lookLines = false,
+    visibleCheck = false,
+    teamCheck = false
 }
 
--- TSB Detection
+-- TSB Detection with Caching
+local tsbClassCache = {}
 local function getTSBClass(player)
     if not player then return "None" end
-    local backpack = player.Backpack; local char = player.Character
+    if tsbClassCache[player] then return tsbClassCache[player] end
+    
+    local backpack = player:FindFirstChild("Backpack")
+    local char = player.Character
     local function has(name) return (backpack and backpack:FindFirstChild(name)) or (char and char:FindFirstChild(name)) end
-    if has("Normal Punch") then return "Saitama" end
-    if has("Table Flip") or has("Death Counter") then return "Saitama Ult" end 
-    if has("Flowing Water") then return "Garou" end
-    if has("The Final Hunt") then return "Garou Ult" end
-    if has("Incinerate") then return "Genos" end
-    if has("Jet Dive") then return "Genos Ult" end
-    if has("Whirlwind") then return "Tatsumaki" end
-    return "Unknown"
+    
+    local class = "Unknown"
+    if has("Normal Punch") then class = "Saitama"
+    elseif has("Table Flip") or has("Death Counter") then class = "Saitama Ult"
+    elseif has("Flowing Water") then class = "Garou"
+    elseif has("The Final Hunt") then class = "Garou Ult"
+    elseif has("Incinerate") then class = "Genos"
+    elseif has("Jet Dive") then class = "Genos Ult"
+    elseif has("Whirlwind") then class = "Tatsumaki"
+    end
+    
+    tsbClassCache[player] = class
+    return class
+end
+
+-- Clear cache on character change or backpack change
+local function clearTSBCache(player)
+    tsbClassCache[player] = nil
+end
+
+Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function() clearTSBCache(p) end)
+    p.ChildAdded:Connect(function(c) if c.Name == "Backpack" then clearTSBCache(p) end end)
+end)
+for _, p in ipairs(Players:GetPlayers()) do
+    p.CharacterAdded:Connect(function() clearTSBCache(p) end)
+    p.ChildAdded:Connect(function(c) if c.Name == "Backpack" then clearTSBCache(p) end end)
 end
 
 -- ESP Drawing
@@ -272,109 +337,137 @@ local function removeEsp(p)
 end
 
 RunService.RenderStepped:Connect(function()
+    if not features.esp.enabled then return end
     local cam = Workspace.CurrentCamera
+    if not cam then return end
+    
+    local vSize = cam.ViewportSize
+    local centerY = vSize.Y / 2
+    local resActive = getgenv().resolutionActive
+    local resScale = getgenv().resolutionScale
+    
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character:FindFirstChild("Head") then
-             if not features.esp.enabled then removeEsp(p) continue end
              local char = p.Character; local hrp = char.HumanoidRootPart; local head = char.Head; local hum = char.Humanoid
              
-             -- Get viewport position and compensate for resolution scale
-             local vec, onScreen = cam:WorldToViewportPoint(hrp.Position)
-             if getgenv().ResolutionLoop and resolutionActive and resolutionScale then
-                 -- Compensate for vertical stretching
-                 local centerY = cam.ViewportSize.Y / 2
-                 vec = Vector3.new(vec.X, centerY + (vec.Y - centerY) / resolutionScale, vec.Z)
-             end
-             
-             -- Chams Logic
-             local hl = char:FindFirstChild("TSB_Highlight")
-             if features.esp.chamsEnabled then
-                 if not hl then
-                     hl = Instance.new("Highlight", char)
-                     hl.Name = "TSB_Highlight"
-                     hl.FillTransparency = 0.5
-                     hl.OutlineTransparency = 0
-                 end
-                 hl.FillColor = features.esp.boxColor
-                 hl.OutlineColor = Color3.new(1,1,1)
-                 hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-             else
-                 if hl then hl:Destroy() end
-             end
+             if espConfig.teamCheck and p.Team == LocalPlayer.Team then removeEsp(p) continue end
 
+             local vec3, onScreen = cam:WorldToViewportPoint(hrp.Position)
+             local vec = Vector2.new(vec3.X, vec3.Y)
+             
              local cache = espCache[p]
              if onScreen and hum.Health > 0 then
                   if not cache then
-                      -- Enforce visibility when ESP is active
-                      if hum then
-                          pcall(function()
-                              hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Subject
-                              hum.NameDisplayDistance = 1000
-                              hum.HealthDisplayDistance = 1000
-                          end)
-                      end
+                      -- Initialization code (once per player)
+                      pcall(function()
+                          hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Subject
+                          hum.NameDisplayDistance = 1000
+                          hum.HealthDisplayDistance = 1000
+                      end)
                       cache = {
                           box = createDrawing("Square", {Thickness=1, Color=Color3.new(1,0,0), Filled=false, Transparency=1}),
+                          boxOutline = createDrawing("Square", {Thickness=3, Color=Color3.new(0,0,0), Filled=false, Transparency=1}),
                           filledBox = createDrawing("Square", {Thickness=0, Filled=true, Transparency=0.5}),
-                          corners = {}, -- Table for corner lines
+                          corners = {}, cornerOutlines = {},
                           name = createDrawing("Text", {Size=16, Center=true, Outline=true, Color=Color3.new(1,1,1)}),
                           dist = createDrawing("Text", {Size=14, Center=true, Outline=true, Color=Color3.new(1,1,1)}),
                           hpText = createDrawing("Text", {Size=14, Center=true, Outline=true, Color=Color3.new(0,1,0)}),
                           healthBar = createDrawing("Square", {Filled=true, Thickness=1, Transparency=1}),
                           healthOutline = createDrawing("Square", {Filled=false, Thickness=1, Color=Color3.new(0,0,0), Transparency=1}),
                           tracer = createDrawing("Line", {Thickness=1, Color=Color3.new(1,1,1), Transparency=1}),
+                          tracerOutline = createDrawing("Line", {Thickness=3, Color=Color3.new(0,0,0), Transparency=1}),
                           classText = createDrawing("Text", {Size=14, Center=true, Outline=true, Color=Color3.fromRGB(255, 215, 0)}),
-                          headDot = createDrawing("Circle", {Radius=3, Filled=true, Color=Color3.new(1,1,1), Visible=false}),
-                          skeleton = {}
+                          headDot = createDrawing("Circle", {Radius=4, Filled=true, Color=Color3.new(1,1,1), Visible=false, Thickness=1}),
+                          headDotOutline = createDrawing("Circle", {Radius=5, Filled=false, Color=Color3.new(0,0,0), Visible=false, Thickness=2}),
+                          lookLine = createDrawing("Line", {Thickness=1, Color=Color3.new(1,0,0), Transparency=1}),
+                          lookLineOutline = createDrawing("Line", {Thickness=3, Color=Color3.new(0,0,0), Transparency=1}),
+                          skeleton = {}, skeletonOutlines = {},
+                          hidden = false
                       }
                       espCache[p] = cache
-                      -- Init Corners (8 lines)
-                      for i=1,8 do table.insert(cache.corners, createDrawing("Line", {Thickness=3, Color=Color3.new(1,0,0), Transparency=1})) end -- Thicker
-                      -- Init Skeleton (10 lines)
-                      for i=1,12 do table.insert(cache.skeleton, createDrawing("Line", {Thickness=1, Color=Color3.new(1,1,1), Transparency=1})) end -- More lines just in case
+                      for i=1,8 do 
+                          table.insert(cache.cornerOutlines, createDrawing("Line", {Thickness=4, Color=Color3.new(0,0,0), Transparency=1}))
+                          table.insert(cache.corners, createDrawing("Line", {Thickness=1.5, Color=Color3.new(1,0,0), Transparency=1})) 
+                      end
+                      for i=1,12 do 
+                          table.insert(cache.skeletonOutlines, createDrawing("Line", {Thickness=3, Color=Color3.new(0,0,0), Transparency=1}))
+                          table.insert(cache.skeleton, createDrawing("Line", {Thickness=1, Color=Color3.new(1,1,1), Transparency=1})) 
+                      end
                   end
                   
-                  -- Calculate positions and compensate for resolution scale
-                  local headPos = cam:WorldToViewportPoint(head.Position + Vector3.new(0,0.5,0))
-                  local legPos = cam:WorldToViewportPoint(hrp.Position - Vector3.new(0,3,0))
+                  cache.hidden = false
                   
-                  if getgenv().ResolutionLoop and resolutionActive and resolutionScale then
-                      local centerY = cam.ViewportSize.Y / 2
-                      headPos = Vector3.new(headPos.X, centerY + (headPos.Y - centerY) / resolutionScale, headPos.Z)
-                      legPos = Vector3.new(legPos.X, centerY + (legPos.Y - centerY) / resolutionScale, legPos.Z)
-                  end
+                  -- Viewport coordinates are already compensated by Camera CFrame transformation
+                  local headPos3, _ = cam:WorldToViewportPoint(head.Position + Vector3.new(0,0.5,0))
+                  local legPos3, _ = cam:WorldToViewportPoint(hrp.Position - Vector3.new(0,3,0))
+                  local headPos = Vector2.new(headPos3.X, headPos3.Y)
+                  local legPos = Vector2.new(legPos3.X, legPos3.Y)
                   
                   local height = legPos.Y - headPos.Y
                   local width = height / 2
                   
                   local mainColor = features.esp.rainbow and Color3.fromHSV(tick() % 5 / 5, 1, 1) or features.esp.boxColor
+
+                  -- Chams Logic (Re-added)
+                  local hl = char:FindFirstChild("TSB_Highlight")
+                  if features.esp.chamsEnabled then
+                      if not hl then
+                          hl = Instance.new("Highlight", char)
+                          hl.Name = "TSB_Highlight"
+                          hl.FillTransparency = 0.5
+                          hl.OutlineTransparency = 0
+                      end
+                      hl.FillColor = mainColor
+                      hl.OutlineColor = Color3.new(1,1,1)
+                      hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                  else
+                      if hl then hl:Destroy() end
+                  end
+
                   if espConfig.deathCounter then
                       local hasDC = (p.Backpack and p.Backpack:FindFirstChild("Death Counter")) or (char and char:FindFirstChild("Death Counter"))
-                      if hasDC then mainColor = Color3.fromRGB(255, 0, 0); dcCache[p]=0 elseif dcCache[p] and dcCache[p]>tick() then mainColor = Color3.fromRGB(255, 255, 0) else if dcCache[p]==0 then dcCache[p]=tick()+10 end end
+                      if hasDC then 
+                          mainColor = Color3.fromRGB(255, 0, 0)
+                          dcCache[p] = tick() + 10 
+                      elseif dcCache[p] and dcCache[p] > tick() then 
+                          mainColor = Color3.fromRGB(255, 255, 0) 
+                      end
                   end
 
 
                   
                   -- Box Styles
-                  cache.box.Visible = false; cache.filledBox.Visible = false; for _,l in pairs(cache.corners) do l.Visible = false end
+                  cache.box.Visible = false; cache.boxOutline.Visible = false; cache.filledBox.Visible = false; 
+                  for _,l in pairs(cache.corners) do l.Visible = false end
+                  for _,l in pairs(cache.cornerOutlines) do l.Visible = false end
+
                   if features.esp.boxEnabled then
                       if espConfig.boxStyle == "Corner" then
                            local tl, tr, bl, br = Vector2.new(vec.X - width/2, vec.Y - height/2), Vector2.new(vec.X + width/2, vec.Y - height/2), Vector2.new(vec.X - width/2, vec.Y + height/2), Vector2.new(vec.X + width/2, vec.Y + height/2)
-                           local len = width / 2 -- Longer lines
+                           local len = width / 2
                            local c = cache.corners
-                           c[1].Visible=true; c[1].From=tl; c[1].To=tl+Vector2.new(len,0); c[1].Color=features.esp.boxColor
-                           c[2].Visible=true; c[2].From=tl; c[2].To=tl+Vector2.new(0,len); c[2].Color=features.esp.boxColor
-                           c[3].Visible=true; c[3].From=tr; c[3].To=tr-Vector2.new(len,0); c[3].Color=features.esp.boxColor
-                           c[4].Visible=true; c[4].From=tr; c[4].To=tr+Vector2.new(0,len); c[4].Color=features.esp.boxColor
-                           c[5].Visible=true; c[5].From=bl; c[5].To=bl+Vector2.new(len,0); c[5].Color=features.esp.boxColor
-                           c[6].Visible=true; c[6].From=bl; c[6].To=bl-Vector2.new(0,len); c[6].Color=features.esp.boxColor
-                           c[7].Visible=true; c[7].From=br; c[7].To=br-Vector2.new(len,0); c[7].Color=features.esp.boxColor
-                           c[8].Visible=true; c[8].From=br; c[8].To=br-Vector2.new(0,len); c[8].Color=features.esp.boxColor
+                           local co = cache.cornerOutlines
+                           
+                           local function drawCorner(idx, p1, p2)
+                               co[idx].Visible=true; co[idx].From=p1; co[idx].To=p2; co[idx].Color=Color3.new(0,0,0)
+                               c[idx].Visible=true; c[idx].From=p1; c[idx].To=p2; c[idx].Color=mainColor
+                           end
+
+                           drawCorner(1, tl, tl+Vector2.new(len,0))
+                           drawCorner(2, tl, tl+Vector2.new(0,len))
+                           drawCorner(3, tr, tr-Vector2.new(len,0))
+                           drawCorner(4, tr, tr+Vector2.new(0,len))
+                           drawCorner(5, bl, bl+Vector2.new(len,0))
+                           drawCorner(6, bl, bl-Vector2.new(0,len))
+                           drawCorner(7, br, br-Vector2.new(len,0))
+                           drawCorner(8, br, br-Vector2.new(0,len))
                       elseif espConfig.boxStyle == "Filled" then
-                           cache.filledBox.Visible = true; cache.filledBox.Size = Vector2.new(width, height); cache.filledBox.Position = Vector2.new(vec.X - width/2, vec.Y - height/2); cache.filledBox.Color = features.esp.boxColor; cache.filledBox.Transparency = espConfig.fillTransparency
-                           cache.box.Visible = true; cache.box.Size = Vector2.new(width, height); cache.box.Position = Vector2.new(vec.X - width/2, vec.Y - height/2); cache.box.Color = features.esp.boxColor
+                           cache.filledBox.Visible = true; cache.filledBox.Size = Vector2.new(width, height); cache.filledBox.Position = Vector2.new(vec.X - width/2, vec.Y - height/2); cache.filledBox.Color = mainColor; cache.filledBox.Transparency = espConfig.fillTransparency
+                           cache.boxOutline.Visible = true; cache.boxOutline.Size = Vector2.new(width, height); cache.boxOutline.Position = Vector2.new(vec.X - width/2, vec.Y - height/2)
+                           cache.box.Visible = true; cache.box.Size = Vector2.new(width, height); cache.box.Position = Vector2.new(vec.X - width/2, vec.Y - height/2); cache.box.Color = mainColor
                       else
-                           cache.box.Visible = true; cache.box.Size = Vector2.new(width, height); cache.box.Position = Vector2.new(vec.X - width/2, vec.Y - height/2); cache.box.Color = features.esp.boxColor
+                           cache.boxOutline.Visible = true; cache.boxOutline.Size = Vector2.new(width, height); cache.boxOutline.Position = Vector2.new(vec.X - width/2, vec.Y - height/2)
+                           cache.box.Visible = true; cache.box.Size = Vector2.new(width, height); cache.box.Position = Vector2.new(vec.X - width/2, vec.Y - height/2); cache.box.Color = mainColor
                       end
                   end
                   
@@ -392,7 +485,10 @@ RunService.RenderStepped:Connect(function()
 
                   -- Info (Dist/Class)
                   if features.esp.infoEnabled then
-                      local distStr = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude) .. "m"
+                      local distStr = "Unknown"
+                      if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                          distStr = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude) .. "m"
+                      end
                       local classStr = getTSBClass(p)
                       cache.dist.Visible = true
                       cache.dist.Text = distStr .. " | " .. classStr
@@ -402,13 +498,30 @@ RunService.RenderStepped:Connect(function()
                       cache.dist.Visible = false
                   end
                   
+                  if espConfig.headDot then
+                      cache.headDot.Visible = true; cache.headDot.Position = Vector2.new(headPos.X, headPos.Y); cache.headDot.Color = mainColor
+                      cache.headDotOutline.Visible = true; cache.headDotOutline.Position = Vector2.new(headPos.X, headPos.Y)
+                  else cache.headDot.Visible = false; cache.headDotOutline.Visible = false end
+
+                  if espConfig.lookLines then
+                      local lookDist = 5
+                      local look3, lookOS = cam:WorldToViewportPoint(head.Position + (head.CFrame.LookVector * lookDist))
+                      local lookVec = Vector2.new(look3.X, look3.Y)
+                      if lookOS then
+                          cache.lookLineOutline.Visible = true; cache.lookLineOutline.From = headPos; cache.lookLineOutline.To = lookVec
+                          cache.lookLine.Visible = true; cache.lookLine.From = headPos; cache.lookLine.To = lookVec; cache.lookLine.Color = mainColor
+                      else cache.lookLine.Visible = false; cache.lookLineOutline.Visible = false end
+                  else cache.lookLine.Visible = false; cache.lookLineOutline.Visible = false end
+                  
                   -- Health
                   if features.esp.healthEnabled then
                       local healthPct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
                       local barHeight = height * healthPct
+                      local healthColor = Color3.fromHSV(healthPct * 0.3, 1, 1) -- Interpolate Green -> Red
+                      
                       if espConfig.healthStyle == "Bar" or espConfig.healthStyle == "Both" then
                           cache.healthOutline.Visible = true; cache.healthOutline.Size = Vector2.new(4, height); cache.healthOutline.Position = Vector2.new(vec.X - width/2 - 6, vec.Y - height/2)
-                          cache.healthBar.Visible = true; cache.healthBar.Color = Color3.fromHSV(healthPct * 0.3, 1, 1); cache.healthBar.Size = Vector2.new(2, barHeight); cache.healthBar.Position = Vector2.new(vec.X - width/2 - 5, (vec.Y - height/2) + (height - barHeight))
+                          cache.healthBar.Visible = true; cache.healthBar.Color = healthColor; cache.healthBar.Size = Vector2.new(2, barHeight); cache.healthBar.Position = Vector2.new(vec.X - width/2 - 5, (vec.Y - height/2) + (height - barHeight))
                       else cache.healthOutline.Visible=false; cache.healthBar.Visible=false end
                       
                       if espConfig.healthStyle == "Text" or espConfig.healthStyle == "Both" then
@@ -419,18 +532,32 @@ RunService.RenderStepped:Connect(function()
                   if espConfig.tsbClass then cache.classText.Visible = true; cache.classText.Text = getTSBClass(p); cache.classText.Position = Vector2.new(vec.X, headPos.Y - 32) else cache.classText.Visible = false end
 
                   if features.esp.tracersEnabled then
-                      cache.tracer.Visible = true; cache.tracer.To = Vector2.new(vec.X, vec.Y)
-                      if espConfig.tracerOrigin == "Bottom" then cache.tracer.From = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y)
-                      elseif espConfig.tracerOrigin == "Center" then cache.tracer.From = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
-                      else local m = UserInputService:GetMouseLocation(); cache.tracer.From = m end
-                  else cache.tracer.Visible = false end
+                      local origin3 = Vector3.zero
+                      if espConfig.tracerOrigin == "Bottom" then origin3 = Vector3.new(cam.ViewportSize.X/2, cam.ViewportSize.Y, 0)
+                      elseif espConfig.tracerOrigin == "Center" then origin3 = Vector3.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2, 0)
+                      else local m = UserInputService:GetMouseLocation(); origin3 = Vector3.new(m.X, m.Y, 0) end
+                      
+                      local origin = Vector2.new(origin3.X, origin3.Y)
+                      cache.tracerOutline.Visible = true; cache.tracerOutline.From = origin; cache.tracerOutline.To = vec
+                      cache.tracer.Visible = true; cache.tracer.From = origin; cache.tracer.To = vec; cache.tracer.Color = mainColor
+                  else cache.tracer.Visible = false; cache.tracerOutline.Visible = false end
 
                   if features.esp.skeletonEnabled then
                       local function line(idx, p1, p2)
-                          if not p1 or not p2 then return end -- Safety check
-                          local l = cache.skeleton[idx]; if not l then return end
-                          local v1, os1 = cam:WorldToViewportPoint(p1.Position); local v2, os2 = cam:WorldToViewportPoint(p2.Position)
-                          if os1 and os2 then l.Visible = true; l.From = Vector2.new(v1.X, v1.Y); l.To = Vector2.new(v2.X, v2.Y) else l.Visible = false end
+                          if not p1 or not p2 then return end
+                          local l = cache.skeleton[idx]
+                          local lo = cache.skeletonOutlines[idx]
+                          if not l or not lo then return end
+                          
+                          local v3_1, os1 = cam:WorldToViewportPoint(p1.Position)
+                          local v3_2, os2 = cam:WorldToViewportPoint(p2.Position)
+                          local v1 = Vector2.new(v3_1.X, v3_1.Y)
+                          local v2 = Vector2.new(v3_2.X, v3_2.Y)
+                          
+                          if os1 and os2 then 
+                              lo.Visible = true; lo.From = v1; lo.To = v2
+                              l.Visible = true; l.From = v1; l.To = v2; l.Color = mainColor
+                          else l.Visible = false; lo.Visible = false end
                       end
                       if char:FindFirstChild("UpperTorso") then
                           line(1, char:FindFirstChild("Head"), char:FindFirstChild("UpperTorso")); line(2, char:FindFirstChild("UpperTorso"), char:FindFirstChild("LeftUpperArm")); line(3, char:FindFirstChild("UpperTorso"), char:FindFirstChild("RightUpperArm"))
@@ -447,21 +574,27 @@ RunService.RenderStepped:Connect(function()
                                line(5, char:FindFirstChild("Torso"), char:FindFirstChild("Right Leg"))
                            else
                                for _,l in pairs(cache.skeleton) do l.Visible=false end
+                               for _,l in pairs(cache.skeletonOutlines) do l.Visible=false end
                            end
                        end
-                  else for _,l in pairs(cache.skeleton) do l.Visible=false end end
+                  else 
+                      for _,l in pairs(cache.skeleton) do l.Visible=false end 
+                      for _,l in pairs(cache.skeletonOutlines) do l.Visible=false end
+                  end
              else
-                  if cache then
+                  if cache and not cache.hidden then
+                      cache.hidden = true
                       for k, d in pairs(cache) do 
-                          if type(d) == "table" then for _, l in pairs(d) do l.Visible = false end else d.Visible = false end
+                          if type(d) == "table" then for _, l in pairs(d) do l.Visible = false end elseif k ~= "hidden" then d.Visible = false end
                       end
                   end
              end
         else
              local cache = espCache[p]
-             if cache then
+             if cache and not cache.hidden then
+                 cache.hidden = true
                  for k, d in pairs(cache) do 
-                     if type(d) == "table" then for _, l in pairs(d) do l.Visible = false end else d.Visible = false end
+                     if type(d) == "table" then for _, l in pairs(d) do l.Visible = false end elseif k ~= "hidden" then d.Visible = false end
                  end
              end
         end
@@ -470,29 +603,32 @@ end)
 Players.PlayerRemoving:Connect(removeEsp)
 
 -- ESP UI
-local masterToggle = EspSection:Toggle({ name = "ESP Enabled", callback = function(bool) features.esp.enabled = bool; if not bool then for p,_ in pairs(espCache) do removeEsp(p) end end end })
-masterToggle:Toggle({ name = "Show TSB Class", callback = function(bool) espConfig.tsbClass = bool end })
-masterToggle:Toggle({ name = "Death Counter Highlight", callback = function(bool) espConfig.deathCounter = bool end })
-masterToggle:Toggle({ name = "Show Info (Dist/Class)", callback = function(bool) features.esp.infoEnabled = bool end })
-masterToggle:Toggle({ name = "Nametags", callback = function(bool) features.esp.nametags = bool end })
-masterToggle:Toggle({ name = "Rainbow ESP", callback = function(bool) features.esp.rainbow = bool end })
+EspSection:Toggle({ name = "ESP Enabled", callback = function(bool) features.esp.enabled = bool; if not bool then for p,_ in pairs(espCache) do removeEsp(p) end end end })
+EspSection:Toggle({ name = "Show TSB Class", callback = function(bool) espConfig.tsbClass = bool end })
+EspSection:Toggle({ name = "Death Counter Highlight", callback = function(bool) espConfig.deathCounter = bool end })
+EspSection:Toggle({ name = "Show Info (Dist/Class)", callback = function(bool) features.esp.infoEnabled = bool end })
+EspSection:Toggle({ name = "Nametags", callback = function(bool) features.esp.nametags = bool end })
+EspSection:Toggle({ name = "Rainbow ESP", callback = function(bool) features.esp.rainbow = bool end })
+EspSection:Toggle({ name = "Visibility Check", callback = function(bool) espConfig.visibleCheck = bool end })
+EspSection:Toggle({ name = "Team Check", callback = function(bool) espConfig.teamCheck = bool end })
 
-local boxToggle = EspSection:Toggle({ name = "Boxes", Name = "Boxes", callback = function(bool) features.esp.boxEnabled = bool end })
-boxToggle:Dropdown({ name = "Style", Name = "Style", text = "Style", items = {"Full", "Filled", "Corner"}, default = "Corner", callback = function(val) espConfig.boxStyle = val end })
-boxToggle:Colorpicker({ name = "Color", Name = "Color", default = Color3.new(1,0,0), callback = function(col) features.esp.boxColor = col end })
-local fillSlider = boxToggle:Slider({ name = "Fill Transparency", Name = "Fill Transparency", text = "Fill Transparency", min = 0, max = 100, default = 50, suffix = "%", callback = function(val) espConfig.fillTransparency = val/100 end })
-if fillSlider.items and fillSlider.items.name then fillSlider.items.name.set("Fill Transparency") end
+EspSection:Toggle({ name = "Boxes", Name = "Boxes", callback = function(bool) features.esp.boxEnabled = bool end })
+EspSection:Dropdown({ name = "Box Style", items = {"Full", "Filled", "Corner"}, default = "Corner", callback = function(val) espConfig.boxStyle = val end })
+EspSection:Colorpicker({ name = "Box Color", default = Color3.new(1,0,0), callback = function(col) features.esp.boxColor = col end })
+EspSection:Slider({ name = "Fill Transparency", min = 0, max = 100, default = 50, suffix = "%", callback = function(val) espConfig.fillTransparency = val/100 end })
 
-local healthToggle = EspSection:Toggle({ name = "Health", Name = "Health", callback = function(bool) features.esp.healthEnabled = bool end })
-healthToggle:Dropdown({ name = "Style", Name = "Style", text = "Style", items = {"Bar", "Text", "Both"}, default = "Bar", callback = function(val) espConfig.healthStyle = val end })
+EspSection:Toggle({ name = "Health", Name = "Health", callback = function(bool) features.esp.healthEnabled = bool end })
+EspSection:Dropdown({ name = "Health Style", items = {"Bar", "Text", "Both"}, default = "Bar", callback = function(val) espConfig.healthStyle = val end })
 
-local tracerToggle = EspSection:Toggle({ name = "Tracers", Name = "Tracers", callback = function(bool) features.esp.tracersEnabled = bool end })
-tracerToggle:Dropdown({ name = "Origin", Name = "Origin", text = "Origin", items = {"Bottom", "Center", "Mouse"}, default = "Bottom", callback = function(val) espConfig.tracerOrigin = val end })
+EspSection:Toggle({ name = "Tracers", Name = "Tracers", callback = function(bool) features.esp.tracersEnabled = bool end })
+EspSection:Dropdown({ name = "Tracer Origin", items = {"Bottom", "Center", "Mouse"}, default = "Bottom", callback = function(val) espConfig.tracerOrigin = val end })
 
 EspSection:Toggle({ name = "Skeleton", Name = "Skeleton", callback = function(bool) features.esp.skeletonEnabled = bool end })
+EspSection:Toggle({ name = "Head Dot", callback = function(bool) espConfig.headDot = bool end })
+EspSection:Toggle({ name = "Look Lines", callback = function(bool) espConfig.lookLines = bool end })
 EspSection:Toggle({ name = "Chams", Name = "Chams", callback = function(bool) features.esp.chamsEnabled = bool end })
 
--- Visual Mods added to WorldSection (right side)
+-- Visual Mods
 WorldSection:Toggle({ name = "Headless (Visual)", callback = function(bool) features.gimmicks.headless = bool end })
 WorldSection:Toggle({ name = "Korblox Leg (Visual)", callback = function(bool) features.gimmicks.korblox = bool end })
 WorldSection:Toggle({ name = "No Camera Shake", callback = function(bool) features.world.disableShake = bool end })
@@ -509,15 +645,12 @@ local blur = Lighting:FindFirstChild("TSB_Blur") or Instance.new("BlurEffect", L
 local function uiToggleWorld(bool) if bool then cc.Enabled=true else cc.Enabled=false; blur.Enabled=false end end -- Helper
 
 local worldToggle = WorldSection:Toggle({ name = "World Modifications", Name = "World Modifications", text = "World Modifications", callback = function(bool) features.lighting.enabled = bool; uiToggleWorld(bool) end }) 
-worldToggle:Colorpicker({ name = "Fog Color", Name = "Fog Color", text = "Fog Color", default = Color3.new(0.5,0.5,0.5), callback = function(col) Lighting.FogColor = col end })
-local timeS = worldToggle:Slider({ name = "Time", Name = "Time", text = "Time", min=0, max=24, default=14, suffix = "h", callback = function(val) Lighting.TimeOfDay = tostring(val)..":00:00" end })
-local brightS = worldToggle:Slider({ name = "Brightness", Name = "Brightness", text = "Brightness", min=0, max=10, default=2, suffix = " lux", callback = function(val) Lighting.Brightness = val end })
-local satS = worldToggle:Slider({ name = "Saturation", Name = "Saturation", text = "Saturation", min=0, max=2, default=1, suffix = "x", callback = function(val) cc.Saturation = val end })
-local contS = worldToggle:Slider({ name = "Contrast", Name = "Contrast", text = "Contrast", min=0, max=2, default=1, suffix = "x", callback = function(val) cc.Contrast = val end })
-local blurS = worldToggle:Slider({ name = "Blur Size", Name = "Blur Size", text = "Blur Size", min=0, max=30, default = 0, suffix = "px", callback = function(val) blur.Size = val; blur.Enabled = (val > 0) end })
-
-for _, s in pairs({timeS, brightS, satS, contS, blurS}) do if s.items and s.items.name then s.items.name.set(s.name or s.text) end end
-
+WorldSection:Colorpicker({ name = "Fog Color", Name = "Fog Color", text = "Fog Color", default = Color3.new(0.5,0.5,0.5), callback = function(col) Lighting.FogColor = col end })
+WorldSection:Slider({ name = "Time", min=0, max=24, default=14, suffix = "h", callback = function(val) Lighting.TimeOfDay = tostring(val)..":00:00" end })
+WorldSection:Slider({ name = "Brightness", min=0, max=10, default=2, suffix = " lux", callback = function(val) Lighting.Brightness = val end })
+WorldSection:Slider({ name = "Saturation", min=0, max=2, default=1, suffix = "x", callback = function(val) cc.Saturation = val end })
+WorldSection:Slider({ name = "Contrast", min=0, max=2, default=1, suffix = "x", callback = function(val) cc.Contrast = val end })
+WorldSection:Slider({ name = "Blur Size", min=0, max=30, default = 0, suffix = "px", callback = function(val) blur.Size = val; blur.Enabled = (val > 0) end })
 
 WorldSection:Toggle({ name = "FullBright", Name = "FullBright", text = "FullBright", callback = function(bool) features.lighting.fullBright = bool end })
 WorldSection:Toggle({ name = "No Fog", Name = "No Fog", text = "No Fog", callback = function(bool) features.lighting.noFog = bool end })
@@ -525,6 +658,7 @@ WorldSection:Toggle({ name = "No Fog", Name = "No Fog", text = "No Fog", callbac
 
 
 
+-- Combined High Priority Visuals & Lighting
 RunService.RenderStepped:Connect(function()
     if features.lighting.fullBright then
         Lighting.Ambient = Color3.new(1, 1, 1)
@@ -535,6 +669,13 @@ RunService.RenderStepped:Connect(function()
         Lighting.FogEnd = 999999
         Lighting.FogStart = 999999
     end
+    
+    if getgenv().resolutionActive then
+        local cam = Workspace.CurrentCamera
+        if cam then
+            cam.CFrame = cam.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, getgenv().resolutionScale, 0, 0, 0, 1)
+        end
+    end
 end)
 
 
@@ -543,9 +684,10 @@ end)
 -- TAB: BLATANT
 -- ====================
 local BlatantCombat = BlatantTab:Section({ name = "Combat", side = "left" })
-local BlatantChar = BlatantTab:Section({ name = "Character & TP", side = "right" })
+local BlatantExtra = BlatantTab:Section({ name = "Extra Features", side = "right" })
 
-
+BlatantExtra:Toggle({ name = "Resolver (Anti-Fake & Prediction)", callback = function(bool) features.hvh.resolver = bool end })
+BlatantExtra:Toggle({ name = "Anti-Exploit Detector", callback = function(bool) features.hvh.antiExploit = bool end })
 
 BlatantCombat:Dropdown({ name = "Target Mode", Name = "Target Mode", text = "Target Mode", items = {"closest to player", "closest to mouse"}, default = "closest to player", callback = function(val) features.aimbot.mode = val end })
 
@@ -578,7 +720,7 @@ BlatantCombat:Toggle({
                         local animate = character.Humanoid:FindFirstChild("Animator")
                         if animate then
                             for i,v in pairs(animate:GetPlayingAnimationTracks()) do
-                                if ifind(animations, v.Animation.AnimationId) then
+                                if v.Animation and ifind(animations, v.Animation.AnimationId) then
                                     -- DYNAMIC PING COMPENSATION
                                     local pTime = animations[v.Animation.AnimationId]
                                     local ping = LocalPlayer:GetNetworkPing()
@@ -588,17 +730,23 @@ BlatantCombat:Toggle({
                                     task.wait(pTime + delay)
                                     dothetech=true
                                     lastcf = character.HumanoidRootPart.CFrame
-                                    v.Stopped:Connect(function()
-                                        dothetech=false
+                                    
+                                    local stopConn
+                                    stopConn = v.Stopped:Connect(function()
+                                        dothetech = false
+                                        if stopConn then stopConn:Disconnect() end
                                     end)
+                                    
                                     local startTime = tick()
-                                    repeat wait()
+                                    repeat task.wait()
                                         Workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
                                         character.HumanoidRootPart.CFrame = CFrame.new(0,-498,0)
                                         character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
                                         character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
                                         if tick() - startTime > 1.5 then dothetech = false end -- Safety timeout
                                     until not dothetech
+                                    
+                                    if stopConn then stopConn:Disconnect() end
                                     task.wait(0.05)
                                     character.HumanoidRootPart.CFrame=lastcf
                                     Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
@@ -615,26 +763,24 @@ BlatantCombat:Toggle({
     end
 })
 
-BlatantChar:Toggle({ name = "No Stun", Name = "No Stun", text = "No Stun", callback = function(bool) 
+BlatantExtra:Toggle({ name = "No Stun", Name = "No Stun", text = "No Stun", callback = function(bool) 
     if not _G.ScriptLoaded then return end
     features.noStun.enabled = bool 
 end })
-BlatantChar:Toggle({ name = "Advanced Engine Stun Block", Name = "Advanced Engine Stun Block", text = "Advanced Engine Stun Block", callback = function(bool) 
+BlatantExtra:Toggle({ name = "Advanced Engine Stun Block", Name = "Advanced Engine Stun Block", text = "Advanced Engine Stun Block", callback = function(bool) 
     if not _G.ScriptLoaded then return end
     features.noStun.highUNC = bool 
 end })
-BlatantChar:Toggle({ name = "Anti Fling", Name = "Anti Fling", text = "Anti Fling", callback = function(bool) features.antiFling.enabled = bool end })
+BlatantExtra:Toggle({ name = "Anti Fling", Name = "Anti Fling", text = "Anti Fling", callback = function(bool) features.antiFling.enabled = bool end })
+BlatantExtra:Toggle({ name = "Anti Death", Name = "Anti Death", text = "Anti Death", callback = function(bool) features.antiDeath.enabled = bool end })
+BlatantExtra:Toggle({ name = "No Animations", Name = "No Animations", text = "No Animations", callback = function(bool) features.stopAnims = bool end })
+BlatantExtra:Toggle({ name = "Infinite Jump", Name = "Infinite Jump", text = "Infinite Jump", callback = function(bool) features.infJump = bool end })
+BlatantExtra:Toggle({ name = "Spinbot", Name = "Spinbot", text = "Spinbot", callback = function(bool) features.gimmicks.spinbot = bool end })
 
-
-BlatantChar:Toggle({ name = "Anti Death", Name = "Anti Death", text = "Anti Death", callback = function(bool) features.antiDeath.enabled = bool end })
-BlatantChar:Toggle({ name = "No Animations", Name = "No Animations", text = "No Animations", callback = function(bool) features.stopAnims = bool end })
-BlatantChar:Toggle({ name = "Noclip", Name = "Noclip", text = "Noclip", callback = function(bool) features.noclip = bool end })
-BlatantChar:Toggle({ name = "Infinite Jump", Name = "Infinite Jump", text = "Infinite Jump", callback = function(bool) features.infJump = bool end })
-BlatantChar:Toggle({ name = "Spinbot", Name = "Spinbot", text = "Spinbot", callback = function(bool) features.gimmicks.spinbot = bool end })
-local spinS = BlatantChar:Slider({ name = "Spinbot Speed", Name = "Spinbot Speed", text = "Spinbot Speed", min = 1, max = 100, default = 50, suffix = " rpm", callback = function(val) features.gimmicks.spinSpeed = val end })
+local spinS = BlatantExtra:Slider({ name = "Spinbot Speed", Name = "Spinbot Speed", text = "Spinbot Speed", min = 1, max = 100, default = 50, suffix = " rpm", callback = function(val) features.gimmicks.spinSpeed = val end })
 if spinS.items and spinS.items.name then spinS.items.name.set("Spinbot Speed") end
 
-BlatantChar:Toggle({ name = "Upside Down", Name = "Upside Down", text = "Upside Down", callback = function(bool)
+BlatantExtra:Toggle({ name = "Upside Down", Name = "Upside Down", text = "Upside Down", callback = function(bool)
     features.gimmicks.upsideDown = bool
     local char = LocalPlayer.Character
     if char and char:FindFirstChildOfClass("Humanoid") then
@@ -643,7 +789,8 @@ BlatantChar:Toggle({ name = "Upside Down", Name = "Upside Down", text = "Upside 
 end })
 
 -- Map TPs ONLY (No Players)
-local tpTarget = "None"
+local tpTargetMap = "None"
+local tpTargetPlayer = "None"
 local tpLocations = {
     ["Safe Zone"] = CFrame.new(-10, 808, -378),
     ["Mid"] = CFrame.new(0, 50, 0),
@@ -663,26 +810,29 @@ table.sort(sortedM)
 mapNames = {"None"}
 for _, n in ipairs(sortedM) do table.insert(mapNames, n) end
 
-BlatantChar:Dropdown({ name = "Map TP", Name = "Map TP", text = "Map TP", items = mapNames, default = "None", callback = function(val) tpTarget = val end })
-local pTP = BlatantChar:Dropdown({ name = "Player TP", Name = "Player TP", text = "Player TP", items = playerNames, default = "None", callback = function(val) tpTarget = val end })
+local mapTpDropdown = BlatantExtra:Dropdown({ name = "Map TP", Name = "Map TP", text = "Map TP", items = mapNames, default = "None", callback = function(val) tpTargetMap = val end })
+local pTP = BlatantExtra:Dropdown({ name = "Player TP", Name = "Player TP", text = "Player TP", items = playerNames, default = "None", callback = function(val) tpTargetPlayer = val end })
 table.insert(dropdownsToUpdate, pTP)
 
-BlatantChar:Button({ name = "Teleport Now", Name = "Teleport Now", text = "Teleport Now", callback = function()
+BlatantExtra:Button({ name = "Teleport Now", Name = "Teleport Now", text = "Teleport Now", callback = function()
     local char = LocalPlayer.Character
-    if not char then return end
-    local targetPos = tpLocations[tpTarget]
-    if targetPos then
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    
+    local targetPos = tpLocations[tpTargetMap]
+    if tpTargetMap ~= "None" and targetPos then
         if typeof(targetPos) == "Vector3" then char.HumanoidRootPart.CFrame = CFrame.new(targetPos)
         else char.HumanoidRootPart.CFrame = targetPos end
-    else
-        local tPlayer = Players:FindFirstChild(tpTarget)
-        if tPlayer and tPlayer.Character then char.HumanoidRootPart.CFrame = tPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,3) end
+    elseif tpTargetPlayer ~= "None" then
+        local tPlayer = Players:FindFirstChild(tpTargetPlayer)
+        if tPlayer and tPlayer.Character and tPlayer.Character:FindFirstChild("HumanoidRootPart") then 
+            char.HumanoidRootPart.CFrame = tPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,3) 
+        end
     end
 end})
 
 local tpMoveTarget = "None"
 local moveTpIds = {["12273188754"]=true, ["12296113986"]=true} 
-BlatantChar:Dropdown({ name = "TP on Garou Move", Name = "TP on Garou Move", text = "TP on Garou Move", items = mapNames, default = "None", callback = function(val) tpMoveTarget = val end })
+BlatantExtra:Dropdown({ name = "TP on Garou Move", Name = "TP on Garou Move", text = "TP on Garou Move", items = mapNames, default = "None", callback = function(val) tpMoveTarget = val end })
 
 
 
@@ -747,25 +897,32 @@ local function setupCharacter(char)
              if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
                  local tHrp = target.Character.HumanoidRootPart
                  
-                 -- GET PREDICTED POSITION (Latency Compensation)
-                 local ourPing = LocalPlayer:GetNetworkPing()
-                 local theirPing = target:GetNetworkPing()
-                 local totalLatency = (ourPing + theirPing) * 1.5 -- Buffer for processing
+                 -- GET PREDICTED POSITION (Resolver Integration)
+                 local predictedOrigin = tHrp.Position
+                 if features.hvh.resolver and features.hvh.resolvedPositions[target.Name] then
+                     predictedOrigin = features.hvh.resolvedPositions[target.Name]
+                 else
+                     local ourPing = LocalPlayer:GetNetworkPing()
+                     local theirPing = target:GetNetworkPing()
+                     local totalLatency = (ourPing + theirPing) * 1.5
+                     predictedOrigin = tHrp.Position + (tHrp.AssemblyLinearVelocity * totalLatency)
+                 end
                  
-                 local predictedOrigin = tHrp.Position + (tHrp.AssemblyLinearVelocity * totalLatency)
-                 
-                 local radius = 5
+                 local radius = 4.5 + (math.random(-5, 5) / 10)
                  local angle = math.rad(math.random(0,360))
                  local offset = Vector3.new(math.cos(angle)*radius, 0, math.sin(angle)*radius)
                  
                  local oldCF = char.HumanoidRootPart.CFrame
-                 -- Teleport to Predicted Position
-                 char.HumanoidRootPart.CFrame = CFrame.lookAt(predictedOrigin + offset, predictedOrigin)
+                 -- Teleport to Predicted Position with random look-at slightly off center
+                 char.HumanoidRootPart.CFrame = CFrame.lookAt(predictedOrigin + offset, predictedOrigin + Vector3.new(math.random(-1,1),0,math.random(-1,1)))
                  
                  -- Look at loop (short)
                  local laLoop; laLoop = RunService.Heartbeat:Connect(function()
                       if char.Parent and tHrp.Parent then 
-                          local curPredicted = tHrp.Position + (tHrp.AssemblyLinearVelocity * totalLatency)
+                          local curPredicted = tHrp.Position
+                          if features.hvh.resolver and features.hvh.resolvedPositions[target.Name] then
+                              curPredicted = features.hvh.resolvedPositions[target.Name]
+                          end
                           char.HumanoidRootPart.CFrame = CFrame.lookAt(char.HumanoidRootPart.Position, curPredicted) 
                       else laLoop:Disconnect() end
                  end)
@@ -824,11 +981,14 @@ local function setupCharacter(char)
 end
 
 LocalPlayer.CharacterAdded:Connect(setupCharacter)
-if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
+task.spawn(function()
+    if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
+end)
 
 -- Anime TP (Keybind T with Animation)
 Features.animeTpEnabled = false
-BlatantChar:Toggle({ name = "Anime TP (Keybind T)", Name = "Anime TP (Keybind T)", text = "Anime TP (Keybind T)", callback = function(bool) Features.animeTpEnabled = bool end })
+BlatantExtra:Toggle({ name = "Anime TP (Keybind T)", Name = "Anime TP (Keybind T)", text = "Anime TP (Keybind T)", callback = function(bool) Features.animeTpEnabled = bool end })
+
 
 
 
@@ -853,7 +1013,7 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
 end)
 
-BlatantChar:Button({ name = "Give Click TP Tool", Name = "Give Click TP Tool", text = "Give Click TP Tool", callback = function()
+BlatantExtra:Button({ name = "Give Click TP Tool", Name = "Give Click TP Tool", text = "Give Click TP Tool", callback = function()
     local mouse = LocalPlayer:GetMouse()
     local tool = Instance.new("Tool"); tool.RequiresHandle = false; tool.Name = "Click TP"
     tool.Activated:Connect(function()
@@ -935,21 +1095,6 @@ local lastOrbitTick = 0
 local lastOrbitRandom = nil
 
 RunService.Stepped:Connect(function()
-
-    -- No Stun: Combined Attributes AND Children cleaning
-    if features.noStun.enabled and LocalPlayer.Character then
-        local char = LocalPlayer.Character
-        char:SetAttribute("Stunned", false)
-        char:SetAttribute("LightStunned", false)
-        char:SetAttribute("Ragdoll", false)
-        char:SetAttribute("Freeze", false)
-        char:SetAttribute("Busy", false)
-        char:SetAttribute("DashLock", false)
-        
-        for _, v in pairs(char:GetChildren()) do
-            if v.Name == "Ragdoll" or v.Name == "Stun" or v.Name == "Freeze" or v.Name=="Stunned" or v.Name == "Busy" then v:Destroy() end
-        end
-    end
 
     -- Anti Fling: Supreme (Velocity Zeroing + Property Disabling for OTHERS only)
     if features.antiFling.enabled then
@@ -1159,17 +1304,25 @@ RunService.Stepped:Connect(function()
         end
     end
     
-    -- HVH: Resolver (anti-fake angle)
+    -- HVH: Resolver (anti-fake angle & prediction)
     if features.hvh and features.hvh.resolver and LocalPlayer.Character then
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                 local hrp = p.Character.HumanoidRootPart
+                
                 -- Force update position to server authoritative (prevents fake lag)
-                if hrp.AssemblyLinearVelocity.Magnitude > 0 then
-                    local realPos = hrp.Position + (hrp.AssemblyLinearVelocity * 0.1)
-                    -- Store for aim compensation
+                if hrp.AssemblyLinearVelocity.Magnitude > 0.1 then
+                    -- PREDICTION LOGIC
+                    local ourPing = LocalPlayer:GetNetworkPing()
+                    local theirPing = p:GetNetworkPing()
+                    local totalLatency = (ourPing + theirPing) * 1.2
+                    
+                    local predictedPos = hrp.Position + (hrp.AssemblyLinearVelocity * totalLatency)
+                    
                     if not features.hvh.resolvedPositions then features.hvh.resolvedPositions = {} end
-                    features.hvh.resolvedPositions[p.Name] = realPos
+                    features.hvh.resolvedPositions[p.Name] = predictedPos
+                else
+                    if features.hvh.resolvedPositions then features.hvh.resolvedPositions[p.Name] = hrp.Position end
                 end
             end
         end
@@ -1190,15 +1343,31 @@ RunService:BindToRenderStep("AntigravityGimmicks", Enum.RenderPriority.Camera.Va
 end)
 
 -- Optimized Performance Mods (Low Quality Mode)
-local lowQualEnabled = false
+local lowQualActive = false
 local function updateLowQual()
-    if not lowQualEnabled then return end
-    for _, v in pairs(Workspace:GetDescendants()) do
-        if v:IsA("BasePart") and v.Transparency == 0 then v.Material = Enum.Material.SmoothPlastic end
-        if v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1 end
-        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false end
-        if v:IsA("MeshPart") then v.RenderFidelity = Enum.RenderFidelity.Precise; v.Material = Enum.Material.SmoothPlastic end
-    end
+    if lowQualActive then return end
+    lowQualActive = true
+    pcall(function()
+        settings().Rendering.QualityLevel = 1
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        local descendants = Workspace:GetDescendants()
+        for i, v in ipairs(descendants) do
+            if i % 500 == 0 then task.wait() end -- Prevent hanging
+            if v:IsA("BasePart") then
+                v.Material = Enum.Material.SmoothPlastic
+                v.CastShadow = false
+            elseif v:IsA("MeshPart") then
+                v.Material = Enum.Material.SmoothPlastic
+                v.RenderFidelity = Enum.RenderFidelity.Performance
+            elseif v:IsA("Decal") or v:IsA("Texture") then
+                v.Transparency = 1
+            elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+                v.Enabled = false
+            end
+        end
+    end)
+    lowQualActive = false
 end
 
 
@@ -1325,9 +1494,6 @@ local fvS = MiscRight:Slider({ name = "FOV Expansion", min = 70, max = 120, defa
 
 for _, s in pairs({rS, oS, gS, fvS}) do if s.items and s.items.name then s.items.name.set(s.name or s.text) end end
 
-MiscRight:Toggle({ name = "Anti-Exploit Detector", callback = function(bool) features.hvh.antiExploit = bool end })
-MiscRight:Toggle({ name = "Resolver (Anti-Fake)", callback = function(bool) features.hvh.resolver = bool end })
-
 local emtF = MiscRight:Dropdown({ name = "Emote Follow", items = playerNames, default = "None", callback = function(val)
     features.bootyClap.target = Players:FindFirstChild(val or "")
     features.bootyClap.following = (val ~= "None" and features.bootyClap.target)
@@ -1386,7 +1552,6 @@ Watermark2.AnchorPoint = Vector2.new(1, 0)
 Watermark2.BackgroundColor3 = Color3.new(0.0862745, 0.0862745, 0.0862745)
 Watermark2.BorderColor3 = Color3.new(0.262745, 0.262745, 0.262745)
 Watermark2.BorderSizePixel = 0
-Watermark2.Draggable = true
 Watermark2.Position = UDim2.new(1, -10, 0, 10)
 Watermark2.Selectable = true
 Watermark2.Size = UDim2.new(0, 200, 0, 18)
@@ -1606,23 +1771,24 @@ end })
 MainSettings:Toggle({ name = "FPS Booster", callback = function(bool)
     features.performance.fpsBooster = bool
     if bool then
-        -- Fast strip
-        for _, v in pairs(Workspace:GetDescendants()) do
-            if v:IsA("BasePart") then v.CastShadow = false end
-            if v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1 end
-            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false end
-        end
-        Lighting.GlobalShadows = false
+        task.spawn(function()
+            local descendants = Workspace:GetDescendants()
+            for i, v in ipairs(descendants) do
+                if i % 1000 == 0 then task.wait() end
+                if v:IsA("BasePart") then v.CastShadow = false end
+                if v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1 end
+                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false end
+            end
+            Lighting.GlobalShadows = false
+        end)
     else
         Lighting.GlobalShadows = true
-        -- Don't re-enable everything, game will create new ones as needed
     end
 end })
 
 
 MainSettings:Toggle({ name = "FPS Ultra Booster (LQ)", Name = "FPS Ultra Booster (LQ)", callback = function(bool)
     if not _G.ScriptLoaded then return end
-    lowQualEnabled = bool
     if bool then
         task.spawn(updateLowQual)
     else
@@ -1635,31 +1801,7 @@ MainSettings:Toggle({ name = "FPS Ultra Booster (LQ)", Name = "FPS Ultra Booster
     end
 end })
 
--- Resolution Stretcher (Working CFrame method)
-local resolutionScale = 1.0
-local resolutionActive = false
-
-local function applyResolution(scale)
-    resolutionScale = scale
-    if scale == 1.0 then
-        resolutionActive = false
-    else
-        resolutionActive = true
-    end
-end
-
-if getgenv().ResolutionLoop == nil then
-    RunService.RenderStepped:Connect(function()
-        if resolutionActive then
-            local cam = Workspace.CurrentCamera
-            if cam then
-                cam.CFrame = cam.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, resolutionScale, 0, 0, 0, 1)
-            end
-        end
-    end)
-    getgenv().ResolutionLoop = true
-end
-
+-- Resolution Stretcher
 MainSettings:Dropdown({ name = "Resolution Preset", items = {"Native (1.0)", "4:3 Stretched (0.75)", "5:4 Stretched (0.8)", "Slight Stretch (0.9)", "Custom"}, default = "Native (1.0)", callback = function(val)
     if val == "Native (1.0)" then
         applyResolution(1.0)
@@ -1693,7 +1835,10 @@ MainSettings:Toggle({ name = "Input Delay Remover (LMLYX v9)", Name = "Input Del
             ["FFlagAvatarUseRuntimeSyncPrims4"] = "True", ["DFFlagRobloxTelemetryEnableSenderCallback"] = "False",
             ["DFFlagSimHumanoidFirstPerson240hz"] = "True", ["FFlagHumanoidStateUseRuntimeSyncPrims"] = "True",
             ["FFlagKeyframeSequenceUseRuntimeSyncPrims"] = "True", ["FFlagParallelLuauRuntimeConcurrency"] = "True",
-            ["FFlagTaskSchedulerUseRuntimeSyncPrims"] = "True", ["FFlagEnableAsyncInput"] = "True"
+            ["FFlagTaskSchedulerUseRuntimeSyncPrims"] = "True", ["FFlagEnableAsyncInput"] = "True",
+            ["FFlagDebugDisplayFPS"] = "True", ["FFlagRenderShadowIntensity"] = "0", ["FFlagRenderTextureDelay"] = "0",
+            ["FFlagRenderHighQualityColors"] = "False", ["FFlagRenderSmoothHumanoidMovement"] = "True",
+            ["FFlagRenderForceLowDetailMeshes"] = "True", ["FFlagRenderLocalPlayerNameTag"] = "False"
         }
         for f, v in pairs(fflags) do pcall(function() setfflag(f, v) end) end
         settings().Rendering.MeshCacheSize = 0
@@ -1715,7 +1860,7 @@ MainSettings:Button({ name = "Enable Performance FFlags", callback = function()
             setfflag("FFlagRenderTextureDelay", "0")
         end
     end)
-    notifications:Notification({ title = "Settings", body = "Optimized FFlags and Rendering applied!", duration = 5 })
+    notify("Settings", "Optimized FFlags and Rendering applied!", Color3.fromRGB(100, 255, 100))
 end })
 
 
@@ -1726,16 +1871,21 @@ _G.ScriptLoaded = true
 local spamMsg = "femboy.sense owns you"
 MainSettings:Textbox({ name = "Spam Message", placeholder = "Text here...", callback = function(val) spamMsg = val end })
 
+local chatSpamLoopActive = false
 MainSettings:Toggle({ name = "Enable Spammer", callback = function(bool)
-
-
     features.gimmicks.chatSpam = bool
-    task.spawn(function()
-        while features.gimmicks.chatSpam do
-            ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(spamMsg, "All")
-            task.wait(3)
-        end
-    end)
+    if bool and not chatSpamLoopActive then
+        chatSpamLoopActive = true
+        task.spawn(function()
+            while features.gimmicks.chatSpam do
+                pcall(function()
+                    ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(spamMsg, "All")
+                end)
+                task.wait(3 + (math.random(-5, 10) / 10))
+            end
+            chatSpamLoopActive = false
+        end)
+    end
 end })
 
 
@@ -1770,8 +1920,11 @@ task.spawn(function()
     while task.wait(0.5) do
         -- OFFENSIVE LOGIC: Kill others using DC (Legacy feature)
         if features.antiDeath.enabled then
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChild("Humanoid")
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            
+            if hrp and hum and hum.Health > 0 then
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p ~= LocalPlayer and p.Character then
                         local backpack = p:FindFirstChild("Backpack")
@@ -1784,9 +1937,16 @@ task.spawn(function()
                                 notify("Anti Death Counter", "Counter-Strike on " .. p.Name, Color3.new(1,0.5,0))
                                 hrp.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
                                 task.wait(0.1)
-                                hrp.CFrame = CFrame.new(0, -900, 0) -- Deep void
+                                
+                                if hum.Health > 0 then
+                                    hrp.CFrame = CFrame.new(0, -900, 0) -- Deep void
+                                end
+                                
                                 task.wait(0.5)
-                                hrp.CFrame = oldPos
+                                
+                                if hum.Health > 0 then
+                                    hrp.CFrame = oldPos
+                                end
                                 task.wait(1)
                             end
                         end
@@ -1794,5 +1954,36 @@ task.spawn(function()
                 end
             end
         end
+    end
+end)
+
+-- Init
+task.delay(1, function()
+    if Window then
+        Window.toggle_menu(true)
+        if Library.init_config then
+            Library:init_config(Window)
+        end
+    end
+end)
+
+-- Ping Monitor
+local lastPingWarning = 0
+task.spawn(function()
+    while true do
+        local success, stats = pcall(function() return game:GetService("Stats") end)
+        if success and stats then
+            local pingItem = stats.Network:FindFirstChild("ServerStatsItem") and stats.Network.ServerStatsItem:FindFirstChild("Data Ping")
+            if pingItem then
+                local ping = pingItem:GetValue()
+                if ping > 150 then
+                    if tick() - lastPingWarning > 60 then
+                        lastPingWarning = tick()
+                        notify("Ping Warning", "your ping is high ("..math.floor(ping).."ms), teleports might fail", Color3.new(1,0,0))
+                    end
+                end
+            end
+        end
+        task.wait(10)
     end
 end)
