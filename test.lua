@@ -163,7 +163,7 @@ local LegitTab = Window:Tab({ name = "Legit", Name = "Legit", text = "Legit" })
 local BlatantTab = Window:Tab({ name = "Blatant", Name = "Blatant", text = "Blatant" })
 local VisualsTab = Window:Tab({ name = "Visual", Name = "Visual", text = "Visual" })
 local MiscTab = Window:Tab({ name = "Misc", Name = "Misc", text = "Misc" })
-local SettingsTab = Window:Tab({ name = "Settings", Name = "Settings", text = "Settings" }) 
+local ConfigTab = Window:Tab({ name = "Config", Name = "Config", text = "Config" }) 
 
 -- Shareable Lists and Dynamic Refresh
 local playerNames = {"None"}
@@ -180,6 +180,11 @@ end
 Players.PlayerAdded:Connect(function() task.wait(1); updatePlayerList() end)
 Players.PlayerRemoving:Connect(updatePlayerList)
 updatePlayerList()
+
+-- REJOIN HELPER
+local function rejoin()
+    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+end
 
 
 
@@ -236,6 +241,78 @@ LegitMain:Toggle({ name = "Shiftlock Smooth Fix", Name = "Shiftlock Smooth Fix",
 local rangeSlider = LegitMain:Slider({ name = "Range", Name = "Range", text = "Range", min = 10, max = 100, default = 10, suffix = " studs", callback = function(val) features.autoBlock.range = val end })
 if rangeSlider.items and rangeSlider.items.name then rangeSlider.items.name.set("Range") end
 
+local hitboxSize = 2
+LegitMain:Toggle({ name = "Legit Hitbox", callback = function(bool)
+    getgenv().legitHitbox = bool
+    task.spawn(function()
+        while getgenv().legitHitbox do
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    p.Character.HumanoidRootPart.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                    p.Character.HumanoidRootPart.Transparency = 0.8
+                    p.Character.HumanoidRootPart.CanCollide = false
+                end
+            end
+            task.wait(1)
+        end
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                p.Character.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
+                p.Character.HumanoidRootPart.Transparency = 1
+            end
+        end
+    end)
+end })
+
+LegitMain:Toggle({ name = "Trigger Bot", callback = function(bool)
+    getgenv().triggerBot = bool
+    task.spawn(function()
+        while getgenv().triggerBot do
+            local char = LocalPlayer.Character
+            if char then
+                local mouse = LocalPlayer:GetMouse()
+                local target = mouse.Target
+                if target and target.Parent and target.Parent:FindFirstChild("Humanoid") then
+                    local p = Players:GetPlayerFromCharacter(target.Parent)
+                    if p and p.Team ~= LocalPlayer.Team then
+                        -- Simulate click/M1 if close enough
+                        local dist = (char.HumanoidRootPart.Position - target.Position).Magnitude
+                        if dist < 15 then
+                             keypress(Enum.KeyCode.ButtonX) -- Adjust based on TSB bindings or use VirtualInputManager
+                             task.wait(0.2)
+                        end
+                    end
+                end
+            end
+            task.wait(0.1)
+        end
+    end)
+end })
+
+LegitMain:Toggle({ name = "Auto Counter (Safe)", callback = function(bool)
+    getgenv().autoCounter = bool
+    task.spawn(function()
+        while getgenv().autoCounter do
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    local anims = p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid:GetPlayingAnimationTracks()
+                    if anims then
+                        for _, track in ipairs(anims) do
+                            -- Detect common TSB attack animation IDs (Simplified example)
+                            if track.Animation.AnimationId:find("12273188754") then -- Example attack ID
+                                 -- Trigger Counter (Move 4 for Saitama/Garou usually)
+                                 keypress(Enum.KeyCode.Four)
+                                 task.wait(0.5)
+                            end
+                        end
+                    end
+                end
+            end
+            task.wait(0.05)
+        end
+    end)
+end })
+
 LegitExtra:Button({ name = "M1 reset script(keybind c)", Name = "M1 reset script(keybind c)", text = "M1 reset script(keybind c)", callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/NexSync-dev/neverlosegui/refs/heads/main/m1reset.lua"))() end })
 
 
@@ -271,21 +348,62 @@ local tsbClassCache = {}
 local function getTSBClass(player)
     if not player then return "None" end
     if tsbClassCache[player] then return tsbClassCache[player] end
-    
+
     local backpack = player:FindFirstChild("Backpack")
     local char = player.Character
     local function has(name) return (backpack and backpack:FindFirstChild(name)) or (char and char:FindFirstChild(name)) end
-    
+
     local class = "Unknown"
-    if has("Normal Punch") then class = "Saitama"
-    elseif has("Table Flip") or has("Death Counter") then class = "Saitama Ult"
-    elseif has("Flowing Water") then class = "Garou"
-    elseif has("The Final Hunt") then class = "Garou Ult"
-    elseif has("Incinerate") then class = "Genos"
-    elseif has("Jet Dive") then class = "Genos Ult"
-    elseif has("Whirlwind") then class = "Tatsumaki"
+    -- Saitama
+    if has("Normal Punch") or has("Consecutive Normal Punches") or has("Shove") or has("Upper Cut") then
+        class = "Saitama"
+        if has("Table Flip") or has("Death Counter") or has("Serious Punch") or has("Omnidirectional Punch") then
+            class = "Saitama (ULT)"
+        end
+    -- Garou
+    elseif has("Flowing Water") or has("Hunter's Grasp") or has("Lethal Whirlwind Stream") or has("Awakening") then
+        class = "Garou"
+        if has("The Final Hunt") or has("God Slayer Robber") or has("God Slayer Mechanical Strike") then
+            class = "Garou (ULT)"
+        end
+    -- Genos
+    elseif has("Incinerate") or has("Blitz Shot") or has("Jet Dive") or has("Machine Gun Blows") then
+        class = "Genos"
+        if has("Ignition Burst") or has("Maximum Output Incinerate") or has("Spiral Incinerate") then
+            class = "Genos (ULT)"
+        end
+    -- Sonic
+    elseif has("Explosive Shuriken") or has("Flash Strike") or has("Whirlwind Kick") or has("Twin Blade Slash") then
+        class = "Sonic"
+        if has("Tenfold Funeral") or has("Afterimage Slash") then
+            class = "Sonic (ULT)"
+        end
+    -- Metal Bat
+    elseif has("Home Run") or has("Foul Ball") or has("Beatdown") or has("Dragon Thrash") then
+        class = "Metal Bat"
+        if has("Death Blow") or has("Savage Tornado") then
+            class = "Metal Bat (ULT)"
+        end
+    -- Tatsumaki
+    elseif has("Whirlwind") or has("Telekinetic Thrust") or has("Psychic Grab") or has("Rock Storm") then
+        class = "Tatsumaki"
+        if has("Psychic Storm") or has("Crushing Tides") then
+            class = "Tatsumaki (ULT)"
+        end
+    -- Atomic Samurai
+    elseif has("Atomic Slash") or has("Swift Slice") or has("Hurdle") or has("Pinpoint Cut") then
+        class = "Atomic Samurai"
+        if has("Sunrise") then -- Sunrise Blade / Atomic Slash (Enhanced)
+             class = "Atomic Samurai (ULT)"
+        end
+    -- Suiryu
+    elseif has("Void Fist") or has("Void Kick") or has("Void Step") or has("Void Smash") then
+        class = "Suiryu"
+        if has("Void Skyward Fist") then
+            class = "Suiryu (ULT)"
+        end
     end
-    
+
     tsbClassCache[player] = class
     return class
 end
@@ -1094,126 +1212,141 @@ local lastOrbitVelocity = {}
 local lastOrbitTick = 0
 local lastOrbitRandom = nil
 
-RunService.Stepped:Connect(function()
+-- Optimized Character Setup (Headless/Korblox)
+local function applyVisualGimmicks(char)
+    if not char then return end
+    
+    if features.gimmicks.headless then
+        local head = char:WaitForChild("Head", 5)
+        if head then
+            head.Transparency = 1
+            local face = head:FindFirstChild("face"); if face then face.Transparency = 1 end
+            local m = head:FindFirstChild("HeadlessMesh")
+            if not m then
+                m = Instance.new("SpecialMesh")
+                m.Name = "HeadlessMesh"; m.MeshType = Enum.MeshType.FileMesh
+                m.MeshId = "rbxassetid://1095708"
+                m.Scale = Vector3.new(0.001, 0.001, 0.001)
+                m.Parent = head
+            end
+        end
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") and (v.Name:lower():find("neck") or v.Name:lower():find("clutter")) then v.Transparency = 1 end
+            if v:IsA("Accessory") and (v.Name:lower():find("head") or v.Name:lower():find("hair")) then
+                local h = v:FindFirstChild("Handle"); if h then h.Transparency = 1 end
+            end
+        end
+    end
 
-    -- Anti Fling: Supreme (Velocity Zeroing + Property Disabling for OTHERS only)
-    if features.antiFling.enabled then
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character then
-                local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                if pRoot then
-                    pRoot.AssemblyLinearVelocity = Vector3.zero
-                    pRoot.AssemblyAngularVelocity = Vector3.zero
+    if features.gimmicks.korblox then
+        local rig = (char:FindFirstChild("RightUpperLeg") and "R15") or "R6"
+        local rightLeg = (rig == "R15" and char:FindFirstChild("RightUpperLeg")) or char:FindFirstChild("Right Leg")
+        if rightLeg then
+            local m = rightLeg:FindFirstChild("KorbloxMesh")
+            if not m then
+                m = Instance.new("SpecialMesh"); m.Name = "KorbloxMesh"; m.MeshType = Enum.MeshType.FileMesh
+                m.MeshId = "rbxassetid://101851696"
+                m.Scale = (rig == "R15" and Vector3.new(1.1, 1, 1.1)) or Vector3.new(1, 1, 1)
+                m.Parent = rightLeg
+            end
+            rightLeg.Transparency = 0; rightLeg.Color = Color3.fromRGB(50, 50, 50)
+            if rig == "R15" then
+                local rl = char:FindFirstChild("RightLowerLeg"); if rl then rl.Transparency = 1 end
+                local rf = char:FindFirstChild("RightFoot"); if rf then rf.Transparency = 1 end
+            end
+        end
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(applyVisualGimmicks)
+if LocalPlayer.Character then applyVisualGimmicks(LocalPlayer.Character) end
+
+-- SLOW LOOP (10 Hz) for Heavy Checks
+task.spawn(function()
+    while task.wait(0.1) do
+        -- HVH: Anti-Exploit Features
+        if features.hvh and features.hvh.antiExploit then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        local velocity = hrp.AssemblyLinearVelocity.Magnitude
+                        if velocity > 250 and not features.hvh.flaggedPlayers[p.Name] then
+                            features.hvh.flaggedPlayers[p.Name] = true
+                            notify("Exploit Detected", p.Name .. " is moving at high speed!", Color3.new(1, 0.5, 0))
+                        end
+                        if not _G.LastPosCache then _G.LastPosCache = {} end
+                        if _G.LastPosCache[p.Name] then
+                            local dist = (hrp.Position - _G.LastPosCache[p.Name]).Magnitude
+                            if dist > 100 and velocity < 10 then 
+                                 notify("Exploit Detected", p.Name .. " teleported " .. math.floor(dist) .. " studs!", Color3.new(1, 0, 0))
+                            end
+                        end
+                        _G.LastPosCache[p.Name] = hrp.Position
+                    end
                 end
-                for _, v in pairs(p.Character:GetDescendants()) do
-                    if v:IsA("BasePart") then 
-                        v.CanCollide = false 
-                        pcall(function() v.CanTouch = false end)
-                        pcall(function() v.CanQuery = false end)
+            end
+        end
+        
+        -- HVH: Resolver
+        if features.hvh and features.hvh.resolver and LocalPlayer.Character then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    local hrp = p.Character.HumanoidRootPart
+                    local totalLatency = LocalPlayer:GetNetworkPing() + p:GetNetworkPing()
+                    if hrp.AssemblyLinearVelocity.Magnitude > 0.5 then
+                        local predictedPos = hrp.Position + (hrp.AssemblyLinearVelocity * (totalLatency * 1.5))
+                        if not features.hvh.resolvedPositions then features.hvh.resolvedPositions = {} end
+                        if features.hvh.resolvedPositions[p.Name] then
+                            features.hvh.resolvedPositions[p.Name] = features.hvh.resolvedPositions[p.Name]:Lerp(predictedPos, 0.5)
+                        else
+                            features.hvh.resolvedPositions[p.Name] = predictedPos
+                        end
+                    else
+                        if not features.hvh.resolvedPositions then features.hvh.resolvedPositions = {} end
+                        features.hvh.resolvedPositions[p.Name] = hrp.Position
                     end
                 end
             end
         end
     end
+end)
 
-    -- No Anim: Hook
-    if features.stopAnims and LocalPlayer.Character and not getgenv().instaKillActive then
-        local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
-        if hum then
-             for _, t in pairs(hum:GetPlayingAnimationTracks()) do t:Stop() end
-             if hum.Animator and not animPlayedConnection then
-                 animPlayedConnection = hum.Animator.AnimationPlayed:Connect(function(t) t:Stop() end)
-             end
+-- FAST LOOP (Stepped) for Physics/Movement
+RunService.Stepped:Connect(function()
+    if features.antiFling.enabled then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                if pRoot then pRoot.AssemblyLinearVelocity = Vector3.zero; pRoot.AssemblyAngularVelocity = Vector3.zero end
+                for _, v in pairs(p.Character:GetDescendants()) do
+                    if v:IsA("BasePart") then v.CanCollide = false end
+                end
+            end
         end
-    elseif animPlayedConnection then
-        animPlayedConnection:Disconnect()
-        animPlayedConnection = nil
     end
-    -- Gimmicks: Spinbot
+
+    if features.stopAnims and LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if hum then for _, t in pairs(hum:GetPlayingAnimationTracks()) do t:Stop() end end
+    end
+
     if features.gimmicks.spinbot and LocalPlayer.Character then
         local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            local speed = (features.gimmicks.spinSpeed or 50) / 10
-            hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(speed), 0)
-        end
+        if hrp then hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(features.gimmicks.spinSpeed/10), 0) end
     end
-    -- Gimmicks: Upside Down
+
     if features.gimmicks.upsideDown and LocalPlayer.Character then
         local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
+        if hrp then 
             local cf = hrp.CFrame
-            hrp.CFrame = CFrame.fromMatrix(cf.Position, cf.RightVector, -cf.UpVector, -cf.LookVector)
+            hrp.CFrame = CFrame.fromMatrix(cf.Position, cf.RightVector, -cf.UpVector, -cf.LookVector) 
         end
     end
-    -- Visual Gimmicks: Headless & Korblox (Fixed V6 - Optimized) - LOCAL PLAYER ONLY
-    if LocalPlayer.Character then
-        local char = LocalPlayer.Character
-        if features.gimmicks.headless then
-             -- Apply to main character head only
-             local head = char:FindFirstChild("Head")
-             if head then
-                 head.Transparency = 1
-                 local face = head:FindFirstChild("face")
-                 if face then face.Transparency = 1 end
-                 
-                 local m = head:FindFirstChild("HeadlessMesh")
-                 if not m then
-                     m = Instance.new("SpecialMesh")
-                     m.Name = "HeadlessMesh"; m.MeshType = Enum.MeshType.FileMesh
-                     m.MeshId = "rbxassetid://1095708"
-                     m.Scale = Vector3.new(0.001, 0.001, 0.001)
-                     m.Parent = head
-                 end
-             end
-             
-             -- Hide neck/accessories (main character only)
-             for _, v in pairs(char:GetDescendants()) do
-                 if v:IsA("BasePart") and (v.Name:lower():find("neck") or v.Name:lower():find("clutter")) then v.Transparency = 1 end
-                 if v:IsA("Accessory") and (v.Name:lower():find("head") or v.Name:lower():find("hair")) then
-                     local h = v:FindFirstChild("Handle")
-                     if h then h.Transparency = 1 end
-                 end
-             end
-        end
 
-        if features.gimmicks.korblox then
-             local rig = (char:FindFirstChild("RightUpperLeg") and "R15") or "R6"
-             local rightLeg = (rig == "R15" and char:FindFirstChild("RightUpperLeg")) or char:FindFirstChild("Right Leg")
-             
-             if rightLeg then
-                 local m = rightLeg:FindFirstChild("KorbloxMesh")
-                 if not m then
-                     m = Instance.new("SpecialMesh")
-                     m.Name = "KorbloxMesh"; m.MeshType = Enum.MeshType.FileMesh
-                     m.MeshId = "rbxassetid://101851696"
-                     m.Scale = (rig == "R15" and Vector3.new(1.1, 1, 1.1)) or Vector3.new(1, 1, 1)
-                     m.Parent = rightLeg
-                 end
-                 rightLeg.Transparency = 0
-                 rightLeg.Color = Color3.fromRGB(50, 50, 50)
-                 
-                 if rig == "R15" then
-                     local rl = char:FindFirstChild("RightLowerLeg"); if rl then rl.Transparency = 1 end
-                     local rf = char:FindFirstChild("RightFoot"); if rf then rf.Transparency = 1 end
-                 end
-             end
-        end
-    end
-    
-    -- Anti Death Counter: Moved to separate task loop below to prevent yielding in Stepped
-
-
-
-
-
-
-
-
-    -- Gimmicks: Orbit (with Prediction)
     if features.gimmicks.orbit and LocalPlayer.Character then
         local target = nil
-        if features.gimmicks.orbitMode == "Selected" then 
-            target = features.gimmicks.orbitTarget
+        if features.gimmicks.orbitMode == "Selected" then target = features.gimmicks.orbitTarget
         elseif features.gimmicks.orbitMode == "Closest" then
             local close, dist = nil, math.huge
             for _, p in ipairs(Players:GetPlayers()) do
@@ -1223,108 +1356,14 @@ RunService.Stepped:Connect(function()
                 end
             end
             target = close
-        elseif features.gimmicks.orbitMode == "Random" then
-            if not lastOrbitRandom or tick() - lastOrbitTick > 5 then
-                local all = Players:GetPlayers()
-                target = all[math.random(1, #all)]
-                if target == LocalPlayer then target = nil end
-                lastOrbitRandom = target; lastOrbitTick = tick()
-            else
-                target = lastOrbitRandom
-            end
         end
-        
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
             local tHrp = target.Character.HumanoidRootPart
             local rot = tick() * (features.gimmicks.orbitSpeed or 5)
             local radius = features.gimmicks.orbitRadius or 10
-            
-            -- Manual Velocity Calculation (for non-physics speed hackers)
-            local currentPos = tHrp.Position
-            local lastPos = playerPosHistory[target]
-            local manualVelocity = Vector3.zero
-            if lastPos then
-                manualVelocity = (currentPos - lastPos) / 0.016 -- approx FrameTime
-            end
-            playerPosHistory[target] = currentPos
-            
-            -- Dynamic Prediction with Smoothing
-            local ourPing = LocalPlayer:GetNetworkPing()
-            local theirPing = target:GetNetworkPing()
-            local totalLatency = (ourPing + theirPing)
-            
-            -- Use the higher of manual vs physics velocity
-            local physVelocity = tHrp.AssemblyLinearVelocity
-            local usedVelocity = physVelocity
-            if manualVelocity.Magnitude > usedVelocity.Magnitude then
-                usedVelocity = manualVelocity
-            end
-            
-            -- Smoothing: Combine with previous velocity to handle direction changes
-            if not lastOrbitVelocity[target] then lastOrbitVelocity[target] = usedVelocity end
-            local smoothedVelocity = lastOrbitVelocity[target]:Lerp(usedVelocity, 0.4) -- EMA
-            lastOrbitVelocity[target] = smoothedVelocity
-            
-            local speed = smoothedVelocity.Magnitude
-            -- Prediction time with capped max to prevent flying away during turns
-            local predictionTime = math.min(totalLatency * (2.0 + (speed / 30)), 0.6) 
-            predictionTime = math.max(predictionTime, 0.25)
-            
-            local predictedPos = tHrp.Position + (smoothedVelocity * predictionTime)
-            
+            local predictedPos = tHrp.Position + (tHrp.AssemblyLinearVelocity * (LocalPlayer:GetNetworkPing() + target:GetNetworkPing()))
             local offset = Vector3.new(math.cos(rot) * radius, 0, math.sin(rot) * radius)
             LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(predictedPos + offset + Vector3.new(0, 3, 0), predictedPos)
-            LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-            
-            -- Keep usernames visible dynamically
-            local hum = target.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                pcall(function()
-                    hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Subject
-                end)
-            end
-        end
-    end
-    
-    -- HVH: Anti-Exploit Features
-    if features.hvh and features.hvh.antiExploit then
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character then
-                local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    -- Detect speed exploiters (moving faster than possible)
-                    local velocity = hrp.AssemblyLinearVelocity.Magnitude
-                    if velocity > 300 then
-                        -- Mark as suspicious
-                        if not features.hvh.flaggedPlayers then features.hvh.flaggedPlayers = {} end
-                        features.hvh.flaggedPlayers[p.Name] = true
-                    end
-                end
-            end
-        end
-    end
-    
-    -- HVH: Resolver (anti-fake angle & prediction)
-    if features.hvh and features.hvh.resolver and LocalPlayer.Character then
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                local hrp = p.Character.HumanoidRootPart
-                
-                -- Force update position to server authoritative (prevents fake lag)
-                if hrp.AssemblyLinearVelocity.Magnitude > 0.1 then
-                    -- PREDICTION LOGIC
-                    local ourPing = LocalPlayer:GetNetworkPing()
-                    local theirPing = p:GetNetworkPing()
-                    local totalLatency = (ourPing + theirPing) * 1.2
-                    
-                    local predictedPos = hrp.Position + (hrp.AssemblyLinearVelocity * totalLatency)
-                    
-                    if not features.hvh.resolvedPositions then features.hvh.resolvedPositions = {} end
-                    features.hvh.resolvedPositions[p.Name] = predictedPos
-                else
-                    if features.hvh.resolvedPositions then features.hvh.resolvedPositions[p.Name] = hrp.Position end
-                end
-            end
         end
     end
 end)
@@ -1447,22 +1486,34 @@ if LocalPlayer.Character then
 end
 
 -- HVH Section on RIGHT
-MiscRight:Toggle({ name = "Anti Void", callback = function(bool) 
-    features.antiVoid.enabled = bool
-    if bool then
-        if features.antiVoid.platform then features.antiVoid.platform:Destroy() end
-        local p = Instance.new("Part", Workspace)
-        p.Size = Vector3.new(9999, 10, 9999)
-        p.Position = Vector3.new(0, -300, 0)
-        p.Anchored = true
-        p.CanCollide = true
-        p.Transparency = 0.5
-        p.BrickColor = BrickColor.new("Royal purple")
-        p.Name = "AntiVoidPlatform"
-        features.antiVoid.platform = p
-    else
-        if features.antiVoid.platform then features.antiVoid.platform:Destroy() end
-    end
+MiscRight:Toggle({ name = "Anti Knockback (Velocity Bypass)", callback = function(bool)
+    getgenv().antiKb = bool
+    task.spawn(function()
+        while getgenv().antiKb do
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                -- Zero out Y velocity if it's too high (knockup) and lock X/Z if not moving
+                local vel = hrp.AssemblyLinearVelocity
+                if vel.Magnitude > 50 then
+                     hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                end
+            end
+            task.wait(0.01)
+        end
+    end)
+end })
+
+MiscLeft:Toggle({ name = "TSB Chat Spam", callback = function(bool)
+    getgenv().chatSpam = bool
+    local msgs = {"GG", "L", "Skill Issue", "Nice try", "fpub on top", "femboys.pub", "get good"}
+    task.spawn(function()
+        while getgenv().chatSpam do
+            local msg = msgs[math.random(1, #msgs)]
+            ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, "All")
+            task.wait(5)
+        end
+    end)
 end })
 local antiDCConn = nil
 MiscRight:Toggle({ name = "Anti DC", callback = function(bool) 
@@ -1715,8 +1766,8 @@ end)
 -- ====================
 -- TAB: SETTINGS
 -- ====================
-local MainSettings = SettingsTab:Section({ name = "Performance", side = "left" })
-local ServerSettings = SettingsTab:Section({ name = "Server Tools", side = "right" })
+local MainSettings = ConfigTab:Section({ name = "Performance", side = "left" })
+local ServerSettings = ConfigTab:Section({ name = "Server Tools", side = "right" })
 
 -- Server fetch helper
 local function fetchServers()
@@ -1724,6 +1775,9 @@ local function fetchServers()
     local success, res = pcall(function() return HttpService:JSONDecode(game:HttpGet(url)) end)
     return success and res and res.data or {}
 end
+
+ServerSettings:Button({ name = "Rejoin Server", callback = rejoin })
+ServerSettings:Button({ name = "Copy Job ID", callback = function() setclipboard(game.JobId); notify("Server", "Job ID copied to clipboard", Color3.new(1,1,1)) end })
 
 ServerSettings:Button({ name = "Server Hop", callback = function() 
     notify("Server Hop", "Searching for servers...", Color3.fromRGB(200, 200, 200))
@@ -1768,39 +1822,163 @@ ServerSettings:Button({ name = "Lowest Players", callback = function()
 end })
 
 
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+
+-- Cache for restoring original state
+_G.FPSCache = _G.FPSCache or {
+    parts = {},      -- [part] = origCastShadow
+    decals = {},      -- [decal] = origTransparency
+    effects = {},     -- [effect] = origEnabled
+    materials = {},   -- [part] = origMaterial
+    lighting = {
+        GlobalShadows = Lighting.GlobalShadows,
+        Technology = Lighting.Technology,
+    },
+    conn = nil,
+}
+
+local function applyToInstance(v, lowQual)
+    if v:IsA("BasePart") then
+        if _G.FPSCache.parts[v] == nil then
+            _G.FPSCache.parts[v] = v.CastShadow
+        end
+        v.CastShadow = false
+
+        if lowQual then
+            if _G.FPSCache.materials[v] == nil then
+                _G.FPSCache.materials[v] = v.Material
+            end
+            v.Material = Enum.Material.SmoothPlastic
+        end
+
+    elseif v:IsA("Decal") or v:IsA("Texture") then
+        if _G.FPSCache.decals[v] == nil then
+            _G.FPSCache.decals[v] = v.Transparency
+        end
+        v.Transparency = 1
+
+    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
+        if _G.FPSCache.effects[v] == nil then
+            _G.FPSCache.effects[v] = v.Enabled
+        end
+        v.Enabled = false
+    end
+end
+
 MainSettings:Toggle({ name = "FPS Booster", callback = function(bool)
     features.performance.fpsBooster = bool
+
+    if bool then
+        -- Hit the big levers first — these matter way more than CastShadow
+        if _G.FPSCache.lighting.GlobalShadows == nil then
+            _G.FPSCache.lighting.GlobalShadows = Lighting.GlobalShadows
+        end
+        if _G.FPSCache.lighting.Technology == nil then
+            _G.FPSCache.lighting.Technology = Lighting.Technology
+        end
+
+        Lighting.GlobalShadows = false
+        pcall(function()
+            Lighting.Technology = Enum.Technology.Compatibility -- biggest single FPS win on most maps
+        end)
+
+        -- Disable post-processing effects (Bloom, SunRays, DOF, ColorCorrection, Atmosphere)
+        for _, fx in ipairs(Lighting:GetChildren()) do
+            if fx:IsA("PostEffect") or fx:IsA("Atmosphere") then
+                if _G.FPSCache.effects[fx] == nil then
+                    _G.FPSCache.effects[fx] = fx.Enabled
+                end
+                pcall(function() fx.Enabled = false end)
+            end
+        end
+
+        -- Process existing instances in chunks
+        task.spawn(function()
+            local descendants = Workspace:GetDescendants()
+            for i, v in ipairs(descendants) do
+                applyToInstance(v, false)
+                if i % 1500 == 0 then task.wait() end
+            end
+        end)
+
+        -- Catch anything streamed/spawned in afterward
+        if _G.FPSCache.conn then _G.FPSCache.conn:Disconnect() end
+        _G.FPSCache.conn = Workspace.DescendantAdded:Connect(function(v)
+            applyToInstance(v, features.performance.fpsUltraBooster)
+        end)
+
+    else
+        -- Restore everything from cache
+        Lighting.GlobalShadows = _G.FPSCache.lighting.GlobalShadows
+        pcall(function() Lighting.Technology = _G.FPSCache.lighting.Technology end)
+
+        if _G.FPSCache.conn then
+            _G.FPSCache.conn:Disconnect()
+            _G.FPSCache.conn = nil
+        end
+
+        for v, orig in pairs(_G.FPSCache.parts) do
+            if v and v.Parent then v.CastShadow = orig end
+        end
+        for v, orig in pairs(_G.FPSCache.decals) do
+            if v and v.Parent then v.Transparency = orig end
+        end
+        for v, orig in pairs(_G.FPSCache.effects) do
+            if v and v.Parent then pcall(function() v.Enabled = orig end) end
+        end
+        if not features.performance.fpsUltraBooster then
+            for v, orig in pairs(_G.FPSCache.materials) do
+                if v and v.Parent then v.Material = orig end
+            end
+            _G.FPSCache.materials = {}
+        end
+
+        _G.FPSCache.parts = {}
+        _G.FPSCache.decals = {}
+        _G.FPSCache.effects = {}
+    end
+end })
+
+MainSettings:Toggle({ name = "Ping Optimizer (Safe)", callback = function(bool)
+    features.performance.pingBooster = bool
+    if bool then
+        local fflags = {
+            ["FFlagOptimizeNetwork"] = "True",
+            ["FFlagOptimizeNetworkTransport"] = "True",
+            ["FFlagOptimizeNetworkRouting"] = "True",
+            ["FFlagEnableAsyncInput"] = "True",
+            ["FFlagParallelLuauRuntimeConcurrency"] = "True"
+        }
+        for f, v in pairs(fflags) do pcall(function() setfflag(f, v) end) end
+        pcall(function() settings().Network.DirectReplicationLimit = 100 end) -- More conservative
+        notify("Network", "Ping Optimization Applied (Balanced)", Color3.new(0.5, 1, 0.5))
+    end
+end })
+
+MainSettings:Toggle({ name = "FPS Ultra Booster (LQ)", callback = function(bool)
+    features.performance.fpsUltraBooster = bool
+
     if bool then
         task.spawn(function()
             local descendants = Workspace:GetDescendants()
             for i, v in ipairs(descendants) do
-                if i % 1000 == 0 then task.wait() end
-                if v:IsA("BasePart") then v.CastShadow = false end
-                if v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1 end
-                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false end
-            end
-            Lighting.GlobalShadows = false
-        end)
-    else
-        Lighting.GlobalShadows = true
-    end
-end })
-
-
-MainSettings:Toggle({ name = "FPS Ultra Booster (LQ)", Name = "FPS Ultra Booster (LQ)", callback = function(bool)
-    if not _G.ScriptLoaded then return end
-    if bool then
-        task.spawn(updateLowQual)
-    else
-        pcall(function()
-            for _, v in pairs(Workspace:GetDescendants()) do
-                if v:IsA("BasePart") then v.Material = Enum.Material.Plastic end
-                if v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 0 end
+                if v:IsA("BasePart") then
+                    if _G.FPSCache.materials[v] == nil then
+                        _G.FPSCache.materials[v] = v.Material
+                    end
+                    v.Material = Enum.Material.SmoothPlastic
+                end
+                if i % 1500 == 0 then task.wait() end
             end
         end)
+    else
+        for v, orig in pairs(_G.FPSCache.materials) do
+            if v and v.Parent then v.Material = orig end
+        end
+        _G.FPSCache.materials = {}
     end
 end })
-
 -- Resolution Stretcher
 MainSettings:Dropdown({ name = "Resolution Preset", items = {"Native (1.0)", "4:3 Stretched (0.75)", "5:4 Stretched (0.8)", "Slight Stretch (0.9)", "Custom"}, default = "Native (1.0)", callback = function(val)
     if val == "Native (1.0)" then
